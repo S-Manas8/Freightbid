@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FreightBid — Driver Dashboard</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* ── Stats bar ───────────────────────────────────────── */
+        .stats-bar {
+            display: flex; gap: 10px; flex-wrap: wrap;
+            padding: 12px 24px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(0,0,0,0.15);
+        }
+        .stat-chip {
+            display: flex; align-items: center; gap: 8px;
+            padding: 5px 14px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            font-size: 0.82rem;
+        }
+        .stat-chip-num { font-family:var(--font-cond); font-weight:700; font-size:1rem; color:var(--accent); }
+        .stat-chip-label { color:var(--muted); font-size:0.75rem; }
+
+        /* ── Tab nav ─────────────────────────────────────────── */
+        .tab-nav {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+            background: rgba(0,0,0,0.2);
+            padding: 0 24px;
+            gap: 0;
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+        .tab-nav::-webkit-scrollbar { display: none; }
+        .tab-btn {
+            padding: 13px 20px;
+            font-family: var(--font-cond);
+            font-weight: 700;
+            font-size: 0.85rem;
+            letter-spacing: 0.04em;
+            color: var(--muted);
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: color 0.15s, border-color 0.15s;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .tab-btn:hover { color: var(--text); }
+        .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .tab-badge {
+            font-size: 0.65rem; font-family: var(--font-mono);
+            background: rgba(245,158,11,0.2); color: var(--accent);
+            padding: 1px 6px; border-radius: 10px; font-weight: 700;
+        }
+
+        /* ── Tab panes ───────────────────────────────────────── */
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; }
+
+        /* ── Page layout ─────────────────────────────────────── */
+        .page-body { max-width: 1200px; margin: 0 auto; padding: 20px 24px; }
+
+        /* ── Load cards ──────────────────────────────────────── */
+        .load-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px 16px;
+            cursor: pointer;
+            transition: border-color 0.18s, transform 0.15s;
+            margin-bottom: 8px;
+        }
+        .load-card:hover { border-color: rgba(245,158,11,0.4); transform: translateX(2px); }
+        .load-card.selected { border-color: var(--accent); background: rgba(245,158,11,0.05); border-left: 3px solid var(--accent); }
+        .load-search {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .load-search input {
+            flex: 1;
+            min-width: 0;
+        }
+        .load-search-count {
+            margin-bottom: 10px;
+            color: var(--muted);
+            font-size: 0.72rem;
+            font-family: var(--font-mono);
+        }
+
+        /* ── Bid panel ───────────────────────────────────────── */
+        .bid-input-row { display:flex; gap:10px; align-items:flex-end; }
+        .bid-input-row input { flex:1; }
+        .already-bid-badge {
+            font-size:0.7rem; font-family:var(--font-mono);
+            color:var(--blue); background:rgba(59,130,246,0.12);
+            padding:2px 8px; border-radius:4px;
+        }
+
+        /* ── Trip cards ──────────────────────────────────────── */
+        .trip-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-left: 3px solid var(--accent);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+        .trip-card-header {
+            padding: 14px 16px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+        }
+        .trip-card-header:hover { background: rgba(255,255,255,0.02); }
+        .trip-card-body {
+            border-top: 1px solid var(--border);
+            padding: 14px 16px;
+        }
+
+        /* ── Status pills ────────────────────────────────────── */
+        .pill {
+            display: inline-flex; align-items: center; gap: 4px;
+            font-size: 0.68rem; font-family: var(--font-mono);
+            font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+            padding: 2px 8px; border-radius: 20px;
+        }
+        .pill-open      { background:rgba(245,158,11,0.15); color:#f59e0b; }
+        .pill-assigned  { background:rgba(59,130,246,0.15); color:#3b82f6; }
+        .pill-transit   { background:rgba(251,146,60,0.15); color:#fb923c; }
+        .pill-delivered { background:rgba(16,185,129,0.15); color:#10b981; }
+        .pill-cancelled { background:rgba(239,68,68,0.15); color:#ef4444; }
+
+        /* ── Two-col layout for find loads ──────────────────── */
+        .loads-layout {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 20px;
+            align-items: start;
+        }
+        @media (max-width: 860px) {
+            .loads-layout { grid-template-columns: 1fr; }
+        }
+
+        /* ── Bid detail sticky ───────────────────────────────── */
+        .bid-detail-sticky {
+            position: sticky;
+            top: 72px;
+        }
+
+        /* ── Section header ──────────────────────────────────── */
+        .sec-hdr {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 12px;
+        }
+        .sec-title {
+            font-family: var(--font-cond); font-weight: 700;
+            font-size: 0.8rem; text-transform: uppercase;
+            letter-spacing: 0.07em; color: var(--muted);
+        }
+        .refresh-btn {
+            font-family: var(--font-mono); font-size: 0.72rem;
+            color: var(--muted); background: none; border: none;
+            cursor: pointer; padding: 3px 7px; border-radius: 4px;
+            transition: color 0.15s, background 0.15s;
+        }
+        .refresh-btn:hover { color: var(--accent); background: rgba(245,158,11,0.08); }
+
+        /* ── Map ─────────────────────────────────────────────── */
+        #trip-map {
+            height: 220px; width: 100%; border-radius: 8px;
+            margin-bottom: 12px; display: none;
+            border: 1px solid var(--border);
+        }
+    </style>
+</head>
+<body>
+
+<!-- ── Nav ──────────────────────────────────────────────────── -->
+<nav class="nav">
+    <a class="nav-logo" href="/">Freight<span>Bid</span></a>
+    <div class="nav-right">
+        <span class="nav-user" id="nav-name">...</span>
+        <span style="color:var(--border)">|</span>
+        <span style="color:var(--blue);font-size:0.72rem;font-family:var(--font-mono);letter-spacing:0.08em;">DRIVER</span>
+        <span id="kyc-nav-badge" style="display:none;"></span>
+        <div style="position:relative;">
+            <button class="btn btn-outline btn-sm" onclick="toggleDriverNotifications()" title="Message notifications" style="position:relative;padding:7px 10px;">
+                💬
+                <span id="driver-notification-badge" style="display:none;position:absolute;top:-6px;right:-6px;background:#ef4444;color:#fff;border-radius:999px;min-width:18px;height:18px;padding:0 5px;font-size:0.65rem;line-height:18px;font-family:var(--font-mono);font-weight:700;text-align:center;"></span>
+            </button>
+            <div id="driver-notification-panel" style="display:none;position:absolute;right:0;top:38px;width:320px;max-height:360px;overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 16px 40px rgba(0,0,0,0.45);z-index:10000;">
+                <div style="padding:10px 14px;border-bottom:1px solid var(--border);font-weight:700;font-size:0.86rem;">Messages</div>
+                <div id="driver-notification-list">
+                    <div style="padding:16px;color:var(--muted);font-size:0.8rem;">No new messages.</div>
+                </div>
+            </div>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="logout()">Logout</button>
+        <a href="/pages/admin.html" class="btn btn-outline btn-sm" style="text-decoration:none;">🛠 Admin Panel</a>
+    </div>
+</nav>
+
+<!-- ── KYC Banner (shown when KYC is not verified) ───────────────────────── -->
+<div id="kyc-banner" style="display:none; background:rgba(245,158,11,0.12); border-bottom:1px solid rgba(245,158,11,0.3); padding:10px 24px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+    <div style="display:flex; align-items:center; gap:10px;">
+        <span style="font-size:1.2rem;">🛡</span>
+        <div>
+            <div id="kyc-banner-title" style="font-weight:700; font-size:0.88rem; color:var(--accent);">KYC Verification Required</div>
+            <div id="kyc-banner-sub" style="font-size:0.75rem; color:var(--muted);">Complete your identity verification to start bidding on loads.</div>
+        </div>
+    </div>
+    <a id="kyc-banner-btn" href="/pages/kyc.html" class="btn btn-primary btn-sm">Complete KYC →</a>
+</div>
+
+<!-- ── Stats Bar ─────────────────────────────────────────────── -->
+<div class="stats-bar">
+    <div class="stat-chip">
+        <span class="stat-chip-num" id="stat-open">—</span>
+        <span class="stat-chip-label">Open Loads</span>
+    </div>
+    <div class="stat-chip">
+        <span class="stat-chip-num" id="stat-mybids">—</span>
+        <span class="stat-chip-label">My Bids</span>
+    </div>
+    <div class="stat-chip">
+        <span class="stat-chip-num" id="stat-active">—</span>
+        <span class="stat-chip-label">Active</span>
+    </div>
+    <div class="stat-chip">
+        <span class="stat-chip-num" id="stat-done">—</span>
+        <span class="stat-chip-label">Completed</span>
+    </div>
+</div>
+
+<!-- ── Tab Nav ───────────────────────────────────────────────── -->
+<div class="tab-nav">
+    <button class="tab-btn active" id="tabn-loads" onclick="switchTab('loads')">
+        🔍 Find Loads
+    </button>
+    <button class="tab-btn" id="tabn-bids" onclick="switchTab('bids')">
+        💰 My Bids <span class="tab-badge" id="badge-bids" style="display:none"></span>
+    </button>
+    <button class="tab-btn" id="tabn-trips" onclick="switchTab('trips')">
+        🚚 My Trips <span class="tab-badge" id="badge-trips" style="display:none"></span>
+    </button>
+    <button class="tab-btn" id="tabn-rating" onclick="switchTab('rating')">
+        ⭐ My Rating
+    </button>
+    <button class="tab-btn" id="tabn-analytics" onclick="switchTab('analytics')">
+        📊 Insights
+    </button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- TAB: Find Loads                                           -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="tab-pane active" id="pane-loads">
+    <div class="page-body">
+        <div class="loads-layout">
+            <!-- Load list -->
+            <div>
+                <div class="sec-hdr">
+                    <span class="sec-title">Available Loads</span>
+                    <button class="refresh-btn" onclick="loadOpenLoads()">↻ Refresh</button>
+                </div>
+                <div class="load-search">
+                    <input type="search" id="load-location-search" placeholder="Search pickup or drop location" oninput="filterOpenLoadsByLocation()">
+                    <button class="refresh-btn" onclick="clearLoadLocationSearch()">Clear</button>
+                </div>
+                <div class="load-search-count" id="load-search-count"></div>
+                <div id="open-loads-list"><div class="loading">Loading...</div></div>
+            </div>
+
+            <!-- Bid detail panel -->
+            <div class="bid-detail-sticky">
+                <div id="bid-placeholder" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:48px 24px;">
+                    <div class="empty-state">
+                        <div class="icon">🚛</div>
+                        <p>Click a load to view details and place your bid.</p>
+                    </div>
+                </div>
+                <div id="bid-panel" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;">
+                    <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+                        <div style="font-family:var(--font-cond);font-weight:700;font-size:1rem;" id="bid-panel-title">Load Detail</div>
+                        <div id="bid-panel-status"></div>
+                    </div>
+                    <div style="padding:14px 18px;">
+                        <div id="bid-panel-route" style="margin-bottom:12px;"></div>
+                        <div id="bid-panel-meta" class="meta-row" style="margin-bottom:14px;gap:14px;"></div>
+                        <hr class="divider">
+                        <div id="bid-panel-myBid" style="margin-bottom:10px;"></div>
+                        <div id="bid-form">
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label>Your Bid Amount (₹)</label>
+                                <div class="bid-input-row">
+                                    <input type="number" id="bid-amount" placeholder="e.g. 12000" min="1">
+                                    <button class="btn btn-primary" onclick="doPlaceBid()" id="bid-btn">Place Bid</button>
+                                </div>
+                            </div>
+                            <p style="font-size:0.72rem;color:var(--muted);margin-top:6px;">Lowest bid wins. You can update anytime.</p>
+                        </div>
+                        <div id="bid-alert" style="margin-top:10px;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- TAB: My Bids                                              -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="tab-pane" id="pane-bids">
+    <div class="page-body">
+        <div class="sec-hdr">
+            <span class="sec-title">My Active Bids</span>
+            <button class="refresh-btn" onclick="loadMyActiveBids()">↻ Refresh</button>
+        </div>
+        <div id="my-bids-list"><div class="loading">Loading...</div></div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- TAB: My Trips                                             -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="tab-pane" id="pane-trips">
+    <div class="page-body">
+        <div id="trip-map"></div>
+        <div class="sec-hdr">
+            <span class="sec-title">My Trips</span>
+            <button class="refresh-btn" onclick="loadMyTrips()">↻ Refresh</button>
+        </div>
+        <div id="my-trips-list"><div class="loading">Loading...</div></div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- TAB: My Rating                                            -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="tab-pane" id="pane-rating">
+    <div class="page-body" style="max-width:600px;">
+        <div class="sec-hdr">
+            <span class="sec-title">My Rating & History</span>
+        </div>
+        <div id="my-rating-box"><div class="loading">Loading...</div></div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- TAB: Insights                                             -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="tab-pane" id="pane-analytics">
+    <div class="page-body" style="max-width:1200px; padding: 20px 24px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:16px;">
+            <div class="sec-hdr" style="margin-bottom:0;">
+                <span class="sec-title">Earnings & Trip Insights</span>
+            </div>
+            <select id="driver-timeframe" onchange="renderDriverAnalytics()" style="width:160px; padding:8px 12px; font-size:0.85rem; background:var(--surface2); border:1px solid var(--border); color:var(--text); border-radius:6px;">
+                <option value="all">All Time</option>
+                <option value="30">Last 30 Days</option>
+                <option value="90">Last 90 Days</option>
+                <option value="180">Last 6 Months</option>
+            </select>
+        </div>
+
+        <!-- Driver KPI Row -->
+        <div style="margin-bottom: 24px; display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px;">
+            <div class="stat-chip" style="flex-direction:column; align-items:flex-start; padding:16px 20px; border-radius:12px; gap:4px; height:auto;">
+                <span class="stat-chip-num" id="dr-kpi-earnings" style="font-size:1.6rem; color:#10b981;">₹0</span>
+                <span class="stat-chip-label" style="text-transform:uppercase; font-size:0.68rem; letter-spacing:0.05em;">Total Earnings</span>
+            </div>
+            <div class="stat-chip" style="flex-direction:column; align-items:flex-start; padding:16px 20px; border-radius:12px; gap:4px; height:auto;">
+                <span class="stat-chip-num" id="dr-kpi-escrow" style="font-size:1.6rem; color:#f59e0b;">₹0</span>
+                <span class="stat-chip-label" style="text-transform:uppercase; font-size:0.68rem; letter-spacing:0.05em;">In Escrow</span>
+            </div>
+            <div class="stat-chip" style="flex-direction:column; align-items:flex-start; padding:16px 20px; border-radius:12px; gap:4px; height:auto;">
+                <span class="stat-chip-num" id="dr-kpi-weight" style="font-size:1.6rem; color:#3b82f6;">0 kg</span>
+                <span class="stat-chip-label" style="text-transform:uppercase; font-size:0.68rem; letter-spacing:0.05em;">Total Weight Hauled</span>
+            </div>
+            <div class="stat-chip" style="flex-direction:column; align-items:flex-start; padding:16px 20px; border-radius:12px; gap:4px; height:auto;">
+                <span class="stat-chip-num" id="dr-kpi-trips" style="font-size:1.6rem; color:#a855f7;">0</span>
+                <span class="stat-chip-label" style="text-transform:uppercase; font-size:0.68rem; letter-spacing:0.05em;">Completed Trips</span>
+            </div>
+        </div>
+
+        <!-- Driver Charts Grid -->
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(480px, 1fr)); gap:24px; margin-bottom:24px;">
+            <!-- Chart 1: Earnings Trend -->
+            <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px;">
+                <div style="font-family:var(--font-cond); font-weight:700; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:16px;">Earnings Trend</div>
+                <div style="position:relative; height:300px;">
+                    <canvas id="chart-driver-earnings"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 2: Cargo Categories hauled -->
+            <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px;">
+                <div style="font-family:var(--font-cond); font-weight:700; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:16px;">Haulage Categories Breakdown</div>
+                <div style="position:relative; height:300px; display:flex; justify-content:center;">
+                    <canvas id="chart-driver-categories" style="max-width:300px;"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 3: Average Earnings by Vehicle Type -->
+            <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px;">
+                <div style="font-family:var(--font-cond); font-weight:700; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:16px;">Earnings by Vehicle Type</div>
+                <div style="position:relative; height:300px;">
+                    <canvas id="chart-driver-vehicles"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 4: Trip Completion Performance -->
+            <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px;">
+                <div style="font-family:var(--font-cond); font-weight:700; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:16px;">Trip Status Distribution</div>
+                <div style="position:relative; height:300px; display:flex; justify-content:center;">
+                    <canvas id="chart-driver-trips" style="max-width:300px;"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Driver Table -->
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px; overflow:hidden;">
+            <div style="font-family:var(--font-cond); font-weight:700; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:16px;">Trip & Category Breakdown Matrix</div>
+            <div style="overflow-x:auto;">
+                <table class="bid-table" id="table-driver-categories" style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr style="border-bottom:1px solid var(--border);">
+                            <th style="padding:10px 12px; text-align:left; font-size:0.75rem; color:var(--muted); text-transform:uppercase;">Category</th>
+                            <th style="padding:10px 12px; text-align:left; font-size:0.75rem; color:var(--muted); text-transform:uppercase;">Trips Completed</th>
+                            <th style="padding:10px 12px; text-align:left; font-size:0.75rem; color:var(--muted); text-transform:uppercase;">Total Earnings</th>
+                            <th style="padding:10px 12px; text-align:left; font-size:0.75rem; color:var(--muted); text-transform:uppercase;">Avg. Earning / Trip</th>
+                            <th style="padding:10px 12px; text-align:left; font-size:0.75rem; color:var(--muted); text-transform:uppercase;">Cargo Weight Hauled</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Dynamically filled -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Floating 1-to-1 Shipper Chat Widget -->
+<div id="driver-chat-widget" style="display:none; position:fixed; right:20px; bottom:20px; width:380px; height:480px; background:rgba(30, 41, 59, 0.75); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.15); border-radius:16px; box-shadow:0 12px 40px rgba(0,0,0,0.5); z-index:9999; flex-direction:column; overflow:hidden; transition:all 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
+    <!-- Widget Header -->
+    <div style="padding:14px 18px; background:linear-gradient(135deg, var(--accent) 0%, rgba(30, 41, 59, 0.9) 100%); display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.1);">
+        <div>
+            <div style="font-weight:700; font-size:0.95rem; color:#fff; display:flex; align-items:center; gap:8px;">
+                <span style="font-size:1.1rem;">💬</span> Chat with Shipper
+            </div>
+            <div id="driver-chat-status" style="font-size:0.68rem; color:rgba(255,255,255,0.7); margin-top:2px; font-family:var(--font-mono);">Connecting...</div>
+        </div>
+        <button onclick="closeDriverChatWidget()" style="background:none; border:none; color:rgba(255,255,255,0.6); font-size:1.2rem; cursor:pointer; padding:4px; line-height:1; transition:color 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='rgba(255,255,255,0.6)'">✕</button>
+    </div>
+    
+    <!-- Widget Shipment Meta Header -->
+    <div id="driver-chat-meta" style="padding:8px 16px; background:rgba(0,0,0,0.25); border-bottom:1px solid rgba(255,255,255,0.05); font-size:0.75rem; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+        Load: Loading Details...
+    </div>
+
+    <!-- Messages Container -->
+    <div id="driver-chat-messages" style="flex:1; padding:16px; overflow-y:auto; display:flex; flex-direction:column; gap:12px; background:rgba(15,23,42,0.3);">
+        <!-- Messages filled dynamically -->
+    </div>
+
+    <div style="padding:10px 16px; background:rgba(15,23,42,0.55); border-top:1px solid rgba(255,255,255,0.08); display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center;">
+        <input type="number" id="driver-adjustment-amount" placeholder="Extra amount" min="1" style="padding:9px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.1); background:rgba(15,23,42,0.7); color:#fff; font-size:0.82rem; outline:none;">
+        <button id="driver-adjustment-request-btn" type="button" title="Request extra freight payment" style="background:rgba(245,158,11,0.18); border:1px solid rgba(245,158,11,0.35); color:#fbbf24; font-size:0.78rem; font-weight:700; padding:9px 11px; border-radius:10px; cursor:pointer;">Request</button>
+    </div>
+
+    <!-- Input Section -->
+    <div style="padding:12px 16px; background:rgba(30, 41, 59, 0.9); border-top:1px solid rgba(255,255,255,0.1); display:flex; gap:8px; align-items:center;">
+        <input type="text" id="driver-chat-input" placeholder="Type a message..." maxlength="1000" style="flex:1; padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.1); background:rgba(15,23,42,0.6); color:#fff; font-size:0.85rem; outline:none; transition:border-color 0.2s;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'" onkeydown="if(event.key==='Enter'){event.preventDefault();sendDriverChatMsg();}">
+        <button onclick="sendDriverChatMsg()" style="background:var(--accent); border:none; color:#fff; font-size:0.85rem; font-weight:700; padding:10px 16px; border-radius:10px; cursor:pointer; transition:transform 0.1s, opacity 0.2s;" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'" onmousedown="this.style.transform='scale(0.96)'" onmouseup="this.style.transform='scale(1)'">Send</button>
+    </div>
+</div>
+
+<script src="/js/api.js?v=11"></script>
+<script>
+// KYC status check on driver dashboard load
+(async () => {
+    try {
+        const s = await getKycStatusFromServer();
+        if (s.kyc_status !== "verified") {
+            window.location.href = "/pages/kyc.html";
+            return;
+        }
+        const banner = document.getElementById("kyc-banner");
+        const navBadge = document.getElementById("kyc-nav-badge");
+
+        if (s.kyc_status === "verified") {
+            banner.style.display = "none";
+            navBadge.innerHTML = `<span style="background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.3);padding:2px 8px;border-radius:10px;font-size:0.65rem;font-family:var(--font-mono);font-weight:700;">✓ KYC</span>`;
+            navBadge.style.display = "inline";
+        } else if (s.kyc_status === "manual_review") {
+            banner.style.display = "flex";
+            document.getElementById("kyc-banner-title").textContent = "KYC Under Manual Review";
+            document.getElementById("kyc-banner-sub").textContent = "Your identity verification is being reviewed. Bidding will be enabled once approved.";
+            document.getElementById("kyc-banner-btn").style.display = "none";
+            navBadge.innerHTML = `<span style="background:rgba(245,158,11,0.15);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);padding:2px 8px;border-radius:10px;font-size:0.65rem;font-family:var(--font-mono);font-weight:700;">⏳ KYC</span>`;
+            navBadge.style.display = "inline";
+        } else if (s.kyc_status === "rejected") {
+            banner.style.display = "flex";
+            banner.style.background = "rgba(239,68,68,0.12)";
+            banner.style.borderColor = "rgba(239,68,68,0.3)";
+            document.getElementById("kyc-banner-title").style.color = "#ef4444";
+            document.getElementById("kyc-banner-title").textContent = "KYC Rejected";
+            document.getElementById("kyc-banner-sub").textContent = "Your KYC was rejected. Please contact support.";
+            document.getElementById("kyc-banner-btn").style.display = "none";
+            navBadge.innerHTML = `<span style="background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3);padding:2px 8px;border-radius:10px;font-size:0.65rem;font-family:var(--font-mono);font-weight:700;">✗ KYC</span>`;
+            navBadge.style.display = "inline";
+        } else {
+            // pending
+            banner.style.display = "flex";
+            navBadge.innerHTML = `<span style="background:rgba(245,158,11,0.15);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);padding:2px 8px;border-radius:10px;font-size:0.65rem;font-family:var(--font-mono);font-weight:700;">! KYC</span>`;
+            navBadge.style.display = "inline";
+        }
+    } catch(e) {}
+})();
+</script>
+<script src="/js/driver.js?v=11"></script>
+</body>
+</html>

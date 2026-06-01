@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FreightBid — Admin KYC Review Panel</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        body { display:flex; flex-direction:column; min-height:100vh; background:var(--bg); }
+        body::before {
+            content:''; position:fixed; inset:0;
+            background-image: linear-gradient(var(--border) 1px,transparent 1px),
+                              linear-gradient(90deg,var(--border) 1px,transparent 1px);
+            background-size:48px 48px; opacity:0.3; pointer-events:none;
+        }
+        .admin-wrapper { max-width:1200px; margin:0 auto; padding:32px 24px; width:100%; position:relative; z-index:1; }
+        .admin-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:32px; flex-wrap:wrap; gap:16px; }
+        .admin-header h1 { font-family:var(--font-cond); font-size:1.8rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; margin:0; }
+        .admin-header h1 span { color:var(--accent); }
+        .admin-badge { display:inline-flex; align-items:center; gap:6px; background:rgba(59,130,246,0.1);
+            border:1px solid rgba(59,130,246,0.3); color:#60a5fa; padding:4px 12px;
+            border-radius:20px; font-size:0.75rem; font-family:var(--font-mono); font-weight:700;
+            text-transform:uppercase; letter-spacing:0.06em; }
+
+        /* Stats Grid */
+        .stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:32px; }
+        @media(max-width:800px){ .stats-grid { grid-template-columns:1fr 1fr; } }
+        @media(max-width:500px){ .stats-grid { grid-template-columns:1fr; } }
+        .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px; text-align:center; }
+        .stat-val { font-size:2rem; font-weight:800; font-family:var(--font-mono); color:var(--accent); }
+        .stat-label { font-size:0.75rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; margin-top:4px; }
+
+        /* Controls */
+        .filter-bar { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px 20px; margin-bottom:24px;
+            display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; }
+        .search-input { background:var(--bg); border:1px solid var(--border); color:var(--text); padding:8px 14px; border-radius:6px; font-size:0.85rem; width:260px; outline:none; transition:border-color 0.2s; }
+        .search-input:focus { border-color:var(--accent); }
+        .filter-tabs { display:flex; gap:8px; }
+        .filter-tab { padding:6px 14px; border-radius:6px; border:1px solid var(--border); background:var(--surface2); color:var(--muted); font-size:0.78rem; font-family:var(--font-mono); cursor:pointer; text-transform:uppercase; transition:all 0.2s; }
+        .filter-tab.active { background:var(--accent); color:#000; border-color:var(--accent); font-weight:700; }
+
+        /* Profile Cards */
+        .profiles-list { display:flex; flex-direction:column; gap:16px; }
+        .profile-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:24px; transition:all 0.3s; }
+        .profile-card:hover { border-color:var(--border-hover); box-shadow:0 8px 30px rgba(0,0,0,0.2); }
+        .profile-card.verified { border-left:4px solid #10b981; }
+        .profile-card.pending { border-left:4px solid #f59e0b; }
+        .profile-card.rejected { border-left:4px solid #ef4444; }
+        .profile-card.manual_review { border-left:4px solid #3b82f6; }
+
+        .profile-top { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:16px; }
+        .user-info h3 { font-size:1.15rem; font-weight:700; margin:0; display:flex; align-items:center; gap:8px; }
+        .user-info p { color:var(--muted); font-size:0.8rem; margin:4px 0 0 0; }
+        .role-badge { font-size:0.65rem; font-family:var(--font-mono); text-transform:uppercase; padding:2px 8px; border-radius:4px; font-weight:700; }
+        .role-badge.driver { background:rgba(16,185,129,0.1); color:#34d399; border:1px solid rgba(16,185,129,0.3); }
+        .role-badge.shipper { background:rgba(59,130,246,0.1); color:#60a5fa; border:1px solid rgba(59,130,246,0.3); }
+
+        .status-badge { font-family:var(--font-mono); font-size:0.75rem; text-transform:uppercase; font-weight:700; padding:4px 12px; border-radius:20px; display:inline-flex; align-items:center; gap:6px; }
+        .status-badge.verified { background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3); }
+        .status-badge.pending { background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3); }
+        .status-badge.rejected { background:rgba(239,68,68,0.15); color:#ef4444; border:1px solid rgba(239,68,68,0.3); }
+        .status-badge.manual_review { background:rgba(59,130,246,0.15); color:#3b82f6; border:1px solid rgba(59,130,246,0.3); }
+
+        /* Fields Grid */
+        .fields-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:20px; }
+        @media(max-width:768px){ .fields-grid { grid-template-columns:1fr 1fr; } }
+        @media(max-width:500px){ .fields-grid { grid-template-columns:1fr; } }
+        .profile-field-item { background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:12px; }
+        .profile-field-key { font-size:0.65rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; font-family:var(--font-mono); }
+        .profile-field-val { font-size:0.85rem; font-weight:600; margin-top:4px; word-break:break-all; }
+        .alert-warn { background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.3);
+            color:#f59e0b; border-radius:8px; padding:12px 14px; font-size:0.82rem; }
+
+        /* Actions */
+        .actions-wrap { display:flex; justify-content:flex-end; gap:10px; }
+        .btn-approve { background:#10b981; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:background 0.2s; }
+        .btn-approve:hover { background:#059669; }
+        .btn-reject { background:rgba(239,68,68,0.15); color:#ef4444; border:1px solid rgba(239,68,68,0.3); padding:8px 16px; border-radius:6px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:all 0.2s; }
+        .btn-reject:hover { background:#ef4444; color:#fff; }
+
+        .spinner { display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,0.3);
+            border-top-color:#fff; border-radius:50%; animation:spin 0.7s linear infinite; }
+        @keyframes spin { to{transform:rotate(360deg)} }
+
+        .empty-state { text-align:center; padding:48px; background:var(--surface); border:1px solid var(--border); border-radius:12px; }
+        .empty-icon { font-size:3rem; margin-bottom:12px; }
+    </style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav class="nav">
+    <a class="nav-logo" href="/">Freight<span>Bid</span></a>
+    <div class="nav-right">
+        <span class="nav-user" id="nav-name">Admin Portal</span>
+        <span style="color:var(--border)">|</span>
+        <div class="admin-badge">🛠 Admin System</div>
+        <button class="btn btn-outline btn-sm" onclick="logout()">Logout</button>
+    </div>
+</nav>
+
+<div class="admin-wrapper">
+    <div class="admin-header">
+        <div>
+            <h1>KYC <span>Review</span> &amp; Auditing</h1>
+            <p style="color:var(--muted);font-size:0.85rem;margin-top:4px;">Review newly registered profiles, audit OCR-extracted data cross-comparisons, and manually override KYC status.</p>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-val" id="stat-total">0</div>
+            <div class="stat-label">Total Profiles</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-val" id="stat-pending" style="color:#f59e0b">0</div>
+            <div class="stat-label">Pending / Review</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-val" id="stat-verified" style="color:#10b981">0</div>
+            <div class="stat-label">Verified Profiles</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-val" id="stat-rejected" style="color:#ef4444">0</div>
+            <div class="stat-label">Rejected Profiles</div>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+        <input type="text" class="search-input" id="search-box" placeholder="Search by name, email..." oninput="filterProfiles()">
+        <div class="filter-tabs">
+            <button class="filter-tab active" id="tab-all" onclick="setFilter('all')">All</button>
+            <button class="filter-tab" id="tab-review" onclick="setFilter('review')">Review Needed</button>
+            <button class="filter-tab" id="tab-disapproval" onclick="setFilter('disapproval')">Disapproval Cases</button>
+            <button class="filter-tab" id="tab-verified" onclick="setFilter('verified')">Verified</button>
+            <button class="filter-tab" id="tab-rejected" onclick="setFilter('rejected')">Rejected</button>
+        </div>
+    </div>
+
+    <!-- Profiles List -->
+    <div class="profiles-list" id="profiles-container">
+        <!-- Rendered dynamically -->
+        <div class="empty-state">
+            <div class="spinner" style="width:24px; height:24px; border-color:rgba(255,255,255,0.2); border-top-color:var(--accent);"></div>
+            <div style="margin-top:12px; color:var(--muted); font-family:var(--font-mono);">Loading KYC profiles...</div>
+        </div>
+    </div>
+</div>
+
+<script src="/js/api.js?v=13"></script>
+<script>
+    // Safeguard: Redirect if not logged in
+    if (!isLoggedIn()) {
+        window.location.href = "/";
+    }
+
+    let allProfiles = [];
+    let currentFilter = 'all';
+
+    async function loadProfiles() {
+        try {
+            const container = document.getElementById("profiles-container");
+            const data = await getAdminKycProfiles();
+            allProfiles = Array.isArray(data) ? data : [];
+            updateStats();
+            renderProfiles();
+        } catch (e) {
+            console.error("Failed to load admin profiles:", e);
+            document.getElementById("profiles-container").innerHTML = `
+                <div class="empty-state" style="border-color:#ef4444;">
+                    <div class="empty-icon" style="color:#ef4444;">🚨</div>
+                    <h3 style="margin:0;color:#ef4444;">Failed to Load Profiles</h3>
+                    <p style="color:var(--muted);font-size:0.85rem;margin-top:6px;">${e.message || 'Check connection or authorization.'}</p>
+                </div>`;
+        }
+    }
+
+    function updateStats() {
+        document.getElementById("stat-total").textContent = allProfiles.length;
+        document.getElementById("stat-pending").textContent = allProfiles.filter(p => p.kyc_status === 'pending' || p.kyc_status === 'manual_review').length;
+        document.getElementById("stat-verified").textContent = allProfiles.filter(p => p.kyc_status === 'verified').length;
+        document.getElementById("stat-rejected").textContent = allProfiles.filter(p => p.kyc_status === 'rejected').length;
+    }
+
+    function setFilter(filter) {
+        currentFilter = filter;
+        ['all','review','disapproval','verified','rejected'].forEach(f => {
+            document.getElementById(`tab-${f}`).classList.toggle('active', f === filter);
+        });
+        renderProfiles();
+    }
+
+    function filterProfiles() {
+        renderProfiles();
+    }
+
+    function renderProfiles() {
+        const query = document.getElementById("search-box").value.toLowerCase().trim();
+        const container = document.getElementById("profiles-container");
+
+        let filtered = allProfiles;
+
+        // Apply tab filters
+        if (currentFilter === 'review') {
+            filtered = filtered.filter(p => p.kyc_status === 'pending' || p.kyc_status === 'manual_review');
+        } else if (currentFilter === 'disapproval') {
+            filtered = filtered.filter(p =>
+                p.kyc_status === 'manual_review' ||
+                p.kyc_status === 'rejected' ||
+                !!p.kyc_review_reason
+            );
+        } else if (currentFilter === 'verified') {
+            filtered = filtered.filter(p => p.kyc_status === 'verified');
+        } else if (currentFilter === 'rejected') {
+            filtered = filtered.filter(p => p.kyc_status === 'rejected');
+        }
+
+        // Apply search query
+        if (query) {
+            filtered = filtered.filter(p => 
+                (p.name || '').toLowerCase().includes(query) ||
+                (p.email || '').toLowerCase().includes(query) ||
+                (p.aadhaar_number || '').includes(query) ||
+                (p.pan_number || '').includes(query) ||
+                (p.license_number || '').includes(query)
+            );
+        }
+
+        if (filtered.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">📁</div>
+                    <h3 style="margin:0;">No KYC Profiles Found</h3>
+                    <p style="color:var(--muted);font-size:0.85rem;margin-top:6px;">No profiles match the active search or filters.</p>
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = filtered.map(p => {
+            const dateStr = p.created_at ? new Date(p.created_at).toLocaleDateString() : 'N/A';
+            const vDateStr = p.kyc_verified_at ? new Date(p.kyc_verified_at).toLocaleDateString() : '';
+            const reviewDetails = p.kyc_review_details || {};
+            const reviewDocs = reviewDetails.documents || {};
+            const docSummary = ['aadhaar','pan','dl'].map(doc => {
+                const fields = reviewDocs[doc]?.fields || {};
+                const errors = reviewDocs[doc]?.validation_errors || [];
+                return `
+                    <div class="profile-field-item">
+                        <div class="profile-field-key">${doc.toUpperCase()} Extracted</div>
+                        <div class="profile-field-val">
+                            Name: ${fields.name || '—'}<br>
+                            DOB: ${fields.dob || '—'}<br>
+                            No: ${fields.id_number || fields.license_number || '—'}
+                            ${errors.length ? `<br><span style="color:#f59e0b">${errors.join("; ")}</span>` : ''}
+                        </div>
+                    </div>`;
+            }).join('');
+
+            // Status label map
+            const statusLabels = {
+                verified: '✓ Approved',
+                pending: '⏳ Pending KYC',
+                manual_review: '🚨 Under Manual Review',
+                rejected: '❌ Rejected'
+            };
+
+            const isPendingAction = p.kyc_status === 'pending' || p.kyc_status === 'manual_review' || p.kyc_status === 'rejected';
+
+            return `
+                <div class="profile-card ${p.kyc_status}">
+                    <div class="profile-top">
+                        <div class="user-info">
+                            <h3>
+                                ${p.name}
+                                <span class="role-badge ${p.role}">${p.role}</span>
+                            </h3>
+                            <p>${p.email} • Phone: ${p.phone || 'N/A'} • Registered: ${dateStr}</p>
+                        </div>
+                        <div>
+                            <span class="status-badge ${p.kyc_status}">
+                                ${statusLabels[p.kyc_status] || p.kyc_status}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="fields-grid">
+                        <div class="profile-field-item">
+                            <div class="profile-field-key">Aadhaar Card No.</div>
+                            <div class="profile-field-val">${p.aadhaar_number || '—'}</div>
+                        </div>
+                        <div class="profile-field-item">
+                            <div class="profile-field-key">PAN Card No.</div>
+                            <div class="profile-field-val">${p.pan_number || '—'}</div>
+                        </div>
+                        <div class="profile-field-item">
+                            <div class="profile-field-key">DL license No.</div>
+                            <div class="profile-field-val">${p.license_number || '—'}</div>
+                        </div>
+                        <div class="profile-field-item">
+                            <div class="profile-field-key">Extracted KYC Name</div>
+                            <div class="profile-field-val">${p.kyc_name || '—'}</div>
+                        </div>
+                        <div class="profile-field-item">
+                            <div class="profile-field-key">Extracted KYC DOB</div>
+                            <div class="profile-field-val">${p.kyc_dob || '—'}</div>
+                        </div>
+                        <div class="profile-field-item">
+                            <div class="profile-field-key">Verification Date</div>
+                            <div class="profile-field-val">${vDateStr || '—'}</div>
+                        </div>
+                    </div>
+
+                    ${p.kyc_review_reason ? `
+                        <div class="alert-warn" style="margin-top:12px;">
+                            <strong>Admin Review Reason:</strong> ${p.kyc_review_reason}
+                        </div>
+                        <div class="fields-grid" style="margin-top:12px;">
+                            ${docSummary}
+                        </div>
+                    ` : ''}
+
+                    <div class="actions-wrap">
+                        ${p.kyc_status !== 'verified' ? `
+                            <button class="btn-reject" onclick="handleReject('${p.id}', this)">
+                                ✕ Reject
+                            </button>
+                            <button class="btn-approve" onclick="handleApprove('${p.id}', this)">
+                                ✓ Approve Manual
+                            </button>
+                        ` : `
+                            <button class="btn-reject" onclick="handleReject('${p.id}', this)">
+                                ✕ Revoke &amp; Reject
+                            </button>
+                        `}
+                    </div>
+                </div>
+            `;
+        }).join("");
+    }
+
+    async function handleApprove(userId, btn) {
+        if (!confirm("Are you sure you want to manually approve this user's KYC?")) return;
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>Approving...';
+        try {
+            await adminApproveKyc(userId);
+            await loadProfiles();
+        } catch (e) {
+            alert("Approval failed: " + e.message);
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }
+
+    async function handleReject(userId, btn) {
+        if (!confirm("Are you sure you want to reject/revoke this user's KYC?")) return;
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>Rejecting...';
+        try {
+            await adminRejectKyc(userId);
+            await loadProfiles();
+        } catch (e) {
+            alert("Rejection failed: " + e.message);
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }
+
+    // Init
+    loadProfiles();
+</script>
+</body>
+</html>

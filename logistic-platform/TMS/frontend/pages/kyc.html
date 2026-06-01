@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FreightBid — Driver KYC Verification</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        body { display:flex; flex-direction:column; min-height:100vh; background:var(--bg); }
+        body::before {
+            content:''; position:fixed; inset:0;
+            background-image: linear-gradient(var(--border) 1px,transparent 1px),
+                              linear-gradient(90deg,var(--border) 1px,transparent 1px);
+            background-size:48px 48px; opacity:0.3; pointer-events:none;
+        }
+        .kyc-wrapper { max-width:860px; margin:0 auto; padding:32px 24px; width:100%; position:relative; z-index:1; }
+        .kyc-header { text-align:center; margin-bottom:32px; }
+        .kyc-header h1 { font-family:var(--font-cond); font-size:1.8rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; }
+        .kyc-header h1 span { color:var(--accent); }
+        .kyc-header p { color:var(--muted); font-size:0.85rem; margin-top:6px; }
+        .kyc-badge { display:inline-flex; align-items:center; gap:6px; background:rgba(245,158,11,0.1);
+            border:1px solid rgba(245,158,11,0.3); color:var(--accent); padding:4px 12px;
+            border-radius:20px; font-size:0.75rem; font-family:var(--font-mono); font-weight:700;
+            text-transform:uppercase; letter-spacing:0.06em; margin-bottom:12px; }
+        /* Stepper */
+        .stepper { display:flex; align-items:center; justify-content:center; gap:0; margin-bottom:32px; flex-wrap:wrap; }
+        .step-item { display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer; }
+        .step-circle { width:44px; height:44px; border-radius:50%; display:flex; align-items:center;
+            justify-content:center; font-size:1.1rem; font-weight:700; border:2px solid; transition:all 0.3s; }
+        .step-circle.done { background:#10b981; border-color:#10b981; color:#fff; }
+        .step-circle.active { background:var(--accent); border-color:var(--accent); color:#000;
+            box-shadow:0 0 16px rgba(245,158,11,0.4); }
+        .step-circle.pending { background:var(--surface); border-color:var(--border); color:var(--muted); }
+        .step-label { font-size:0.7rem; font-family:var(--font-mono); text-transform:uppercase;
+            letter-spacing:0.05em; color:var(--muted); }
+        .step-label.active { color:var(--accent); font-weight:700; }
+        .step-line { width:60px; height:2px; margin-bottom:20px; transition:background 0.3s; }
+        /* Cards */
+        .kyc-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:32px; margin-bottom:16px; }
+        .kyc-card h2 { font-family:var(--font-cond); font-size:1.3rem; font-weight:700; text-transform:uppercase;
+            letter-spacing:0.06em; margin-bottom:8px; }
+        .kyc-card p.sub { color:var(--muted); font-size:0.85rem; margin-bottom:24px; }
+        /* Upload slots */
+        .slots-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px; }
+        @media(max-width:600px){ .slots-grid { grid-template-columns:1fr; } }
+        .slot { border:2px dashed var(--border); border-radius:10px; padding:20px; text-align:center;
+            cursor:pointer; transition:border-color 0.2s; position:relative; min-height:140px;
+            display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; }
+        .slot:hover { border-color:var(--accent); }
+        .slot.has-file { border-style:solid; border-color:#10b981; }
+        .slot input[type=file] { display:none; }
+        .slot-label { font-family:var(--font-mono); font-size:0.7rem; text-transform:uppercase;
+            letter-spacing:0.06em; color:var(--muted); margin-bottom:4px; }
+        .slot-icon { font-size:2rem; }
+        .slot-text { font-size:0.82rem; color:var(--muted); }
+        .slot-preview { width:100%; max-height:120px; object-fit:cover; border-radius:6px; }
+        .slot-remove { position:absolute; top:8px; right:8px; background:rgba(239,68,68,0.15);
+            border:none; color:#ef4444; border-radius:4px; padding:2px 8px; font-size:0.7rem;
+            cursor:pointer; font-family:var(--font-mono); }
+        /* Webcam */
+        .webcam-container { position:relative; border-radius:10px; overflow:hidden; background:#000; margin-bottom:12px; }
+        .webcam-container video { width:100%; display:block; }
+        .webcam-overlay { position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.7);
+            padding:10px; display:flex; justify-content:center; gap:10px; }
+        .challenge-overlay { position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.8);
+            padding:12px; text-align:center; }
+        .challenge-text { color:#e2e8f0; font-size:0.9rem; font-weight:700; }
+        .challenge-progress { color:var(--accent); font-size:0.75rem; font-family:var(--font-mono); margin-top:4px; }
+        /* Scores */
+        .scores-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:16px 0; }
+        .score-card { background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:12px; text-align:center; }
+        .score-label { font-size:0.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; }
+        .score-bar { height:6px; border-radius:3px; background:var(--border); margin:6px 0; overflow:hidden; }
+        .score-fill { height:100%; border-radius:3px; transition:width 0.5s; }
+        .score-val { font-size:1.1rem; font-weight:700; font-family:var(--font-mono); }
+        /* Risk */
+        .risk-gauge { text-align:center; padding:24px; }
+        .risk-score-num { font-size:3rem; font-weight:800; font-family:var(--font-mono); }
+        .risk-level-badge { display:inline-block; padding:4px 16px; border-radius:20px; font-size:0.8rem;
+            font-weight:700; font-family:var(--font-mono); text-transform:uppercase; margin-top:8px; }
+        .compliance-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:16px 0; }
+        .comp-badge { border:1px solid; border-radius:8px; padding:12px; }
+        .comp-label { font-size:0.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; }
+        .comp-val { font-size:0.85rem; font-weight:700; margin-top:4px; }
+        /* Result */
+        .result-banner { display:flex; align-items:center; gap:12px; padding:16px 20px;
+            border-radius:10px; border:1px solid; margin-bottom:20px; }
+        .result-icon { font-size:2rem; }
+        .result-title { font-size:1.1rem; font-weight:700; }
+        .result-sub { font-size:0.82rem; color:var(--muted); margin-top:2px; }
+        .summary-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:20px; }
+        .summary-item { background:var(--surface2); border-radius:8px; padding:10px 14px; }
+        .summary-key { font-size:0.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; }
+        .summary-val { font-size:0.9rem; font-weight:700; margin-top:2px; }
+        /* Misc */
+        .alert-info { background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.3);
+            color:#93c5fd; border-radius:8px; padding:12px 16px; font-size:0.82rem; margin-bottom:16px; }
+        .alert-warn { background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.3);
+            color:var(--accent); border-radius:8px; padding:12px 16px; font-size:0.82rem; margin-bottom:16px; }
+        .alert-error { background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3);
+            color:#fca5a5; border-radius:8px; padding:12px 16px; font-size:0.82rem; margin-bottom:16px; }
+        .alert-success { background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3);
+            color:#6ee7b7; border-radius:8px; padding:12px 16px; font-size:0.82rem; margin-bottom:16px; }
+        .extracted-box { background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+            padding:14px; margin-top:12px; }
+        .extracted-fields { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-top:8px; }
+        .field-item { background:var(--surface); border-radius:6px; padding:8px 10px; }
+        .field-key { font-size:0.65rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; }
+        .field-val { font-size:0.85rem; font-weight:600; margin-top:2px; }
+        .doc-nav { display:flex; gap:4px; margin-bottom:20px; }
+        .doc-nav-btn { flex:1; padding:8px; text-align:center; border:1px solid var(--border);
+            border-radius:6px; font-family:var(--font-mono); font-size:0.72rem; text-transform:uppercase;
+            letter-spacing:0.05em; cursor:pointer; background:var(--surface2); color:var(--muted);
+            transition:all 0.2s; }
+        .doc-nav-btn.active { border-color:var(--accent); color:var(--accent); background:rgba(245,158,11,0.08); }
+        .doc-nav-btn.done { border-color:#10b981; color:#10b981; background:rgba(16,185,129,0.08); }
+        .face-status { position:absolute; bottom:12px; left:50%; transform:translateX(-50%);
+            background:rgba(0,0,0,0.75); padding:5px 14px; border-radius:20px; border:2px solid;
+            white-space:nowrap; font-size:0.8rem; font-weight:700; }
+        .pulse { animation:pulse 1.5s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+        .spinner { display:inline-block; width:16px; height:16px; border:2px solid rgba(255,255,255,0.3);
+            border-top-color:#fff; border-radius:50%; animation:spin 0.7s linear infinite; vertical-align:middle; margin-right:6px; }
+        @keyframes spin { to{transform:rotate(360deg)} }
+        .hidden { display:none !important; }
+    </style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav class="nav">
+    <a class="nav-logo" href="/">Freight<span>Bid</span></a>
+    <div class="nav-right">
+        <span class="nav-user" id="nav-name">...</span>
+        <span style="color:var(--border)">|</span>
+        <span style="color:#10b981;font-size:0.72rem;font-family:var(--font-mono);letter-spacing:0.08em;">KYC</span>
+        <button class="btn btn-outline btn-sm" onclick="logout()">Logout</button>
+    </div>
+</nav>
+
+<div class="kyc-wrapper">
+    <div class="kyc-header">
+        <div class="kyc-badge">🛡 Identity Verification Required</div>
+        <h1>Driver <span>KYC</span> Verification</h1>
+        <p>Complete your identity verification to start bidding on loads. This is a one-time process.</p>
+    </div>
+
+    <!-- Stepper -->
+    <div class="stepper" id="stepper">
+        <div class="step-item" onclick="goToStep(0)">
+            <div class="step-circle active" id="sc-0">📄</div>
+            <span class="step-label active" id="sl-0">Documents</span>
+        </div>
+        <div class="step-line" id="line-0" style="background:var(--border)"></div>
+        <div class="step-item" onclick="goToStep(1)">
+            <div class="step-circle pending" id="sc-1">🤳</div>
+            <span class="step-label" id="sl-1">Selfie</span>
+        </div>
+        <div class="step-line" id="line-1" style="background:var(--border)"></div>
+        <div class="step-item" onclick="goToStep(2)">
+            <div class="step-circle pending" id="sc-2">🛡</div>
+            <span class="step-label" id="sl-2">Risk & Compliance</span>
+        </div>
+        <div class="step-line" id="line-2" style="background:var(--border)"></div>
+        <div class="step-item" onclick="goToStep(3)">
+            <div class="step-circle pending" id="sc-3">✅</div>
+            <span class="step-label" id="sl-3">Complete</span>
+        </div>
+    </div>
+
+    <!-- STEP 0: Document Upload -->
+    <div id="pane-0">
+        <div class="kyc-card">
+            <h2>📄 Document Upload</h2>
+            <p class="sub">Upload front side of Aadhaar &amp; PAN Card. For Driving License, upload both front and back sides.</p>
+
+            <!-- Doc sub-nav -->
+            <div class="doc-nav">
+                <div class="doc-nav-btn active" id="dnav-aadhaar" onclick="switchDoc('aadhaar')">Aadhaar</div>
+                <div class="doc-nav-btn" id="dnav-pan" onclick="switchDoc('pan')">PAN Card</div>
+                <div class="doc-nav-btn" id="dnav-dl" onclick="switchDoc('dl')">Driving License</div>
+            </div>
+
+            <!-- Aadhaar — front side only -->
+            <div id="doc-aadhaar">
+                <div class="alert-info" style="margin-bottom:12px; font-size:0.82rem;">
+                    📌 Upload the <strong>FRONT side</strong> — the side with your <strong>photo, name, DOB and Aadhaar number</strong>. Not the address side.
+                </div>
+                <div style="max-width:380px;">
+                    <div class="slot" id="slot-aadhaar-front" onclick="triggerFileInput('aadhaar','front')">
+                        <input type="file" id="file-aadhaar-front" accept="image/*" onchange="handleFileSelect('aadhaar','front',this)">
+                        <div class="slot-label">Front Side — Photo + Name + DOB</div>
+                        <div class="slot-icon">🪪</div>
+                        <div class="slot-text">Click to upload or drag &amp; drop</div>
+                    </div>
+                </div>
+                <div id="extracted-aadhaar" class="hidden" style="margin-top:12px;"></div>
+                <button class="btn btn-primary" style="margin-top:12px;" onclick="extractDoc('aadhaar')" id="btn-extract-aadhaar">Extract Aadhaar</button>
+            </div>
+
+            <!-- PAN — front side only -->
+            <div id="doc-pan" class="hidden">
+                <div class="alert-info" style="margin-bottom:12px; font-size:0.82rem;">
+                    📌 Upload the <strong>FRONT side</strong> — the side with your <strong>photo, name, PAN number and DOB</strong>.
+                </div>
+                <div style="max-width:380px;">
+                    <div class="slot" id="slot-pan-front" onclick="triggerFileInput('pan','front')">
+                        <input type="file" id="file-pan-front" accept="image/*" onchange="handleFileSelect('pan','front',this)">
+                        <div class="slot-label">Front Side</div>
+                        <div class="slot-icon">💳</div>
+                        <div class="slot-text">Click to upload or drag &amp; drop</div>
+                    </div>
+                </div>
+                <div id="extracted-pan" class="hidden" style="margin-top:12px;"></div>
+                <button class="btn btn-primary" style="margin-top:12px;" onclick="extractDoc('pan')" id="btn-extract-pan">Extract PAN Card</button>
+            </div>
+
+            <!-- DL — front AND back required -->
+            <div id="doc-dl" class="hidden">
+                <div class="alert-info" style="margin-bottom:12px; font-size:0.82rem;">
+                    Upload the front side first. If Date of Birth is not printed there, upload the back side too.
+                </div>
+                <div class="slots-grid">
+                    <div class="slot" id="slot-dl-front" onclick="triggerFileInput('dl','front')">
+                        <input type="file" id="file-dl-front" accept="image/*" onchange="handleFileSelect('dl','front',this)">
+                        <div class="slot-label">Front Side</div>
+                        <div class="slot-icon">🚗</div>
+                        <div class="slot-text">Click to upload or drag &amp; drop</div>
+                    </div>
+                    <div class="slot" id="slot-dl-back" onclick="triggerFileInput('dl','back')">
+                        <input type="file" id="file-dl-back" accept="image/*" onchange="handleFileSelect('dl','back',this)">
+                        <div class="slot-label">Back Side <span style="color:var(--muted);font-size:0.7rem;">(DOB fallback)</span></div>
+                        <div class="slot-icon">🚗</div>
+                        <div class="slot-text">Click to upload or drag &amp; drop</div>
+                    </div>
+                </div>
+                <div id="extracted-dl" class="hidden" style="margin-top:12px;"></div>
+                <button class="btn btn-primary" style="margin-top:12px;" onclick="extractDoc('dl')" id="btn-extract-dl">Extract Driving License</button>
+            </div>
+
+            <div id="doc-msg" class="hidden" style="margin-top:12px;"></div>
+
+            <div style="margin-top:20px; padding-top:20px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+                <div id="doc-progress-text" style="color:var(--muted); font-size:0.82rem; font-family:var(--font-mono);">0 / 3 documents extracted</div>
+                <button class="btn btn-primary" onclick="proceedToSelfie()" id="btn-proceed-docs" disabled>Proceed to Selfie →</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- STEP 1: Selfie / Biometric -->
+    <div id="pane-1" class="hidden">
+        <div class="kyc-card">
+            <h2>🤳 Biometric Verification</h2>
+            <p class="sub">Face detection + liveness challenges + deepfake prevention. Allow camera access when prompted.</p>
+            <div id="selfie-msg" class="hidden" style="margin-bottom:16px;"></div>
+
+            <div id="selfie-phase-detect">
+                <div class="webcam-container" id="webcam-wrap" style="max-width:480px; margin:0 auto 16px;">
+                    <video id="selfie-video" autoplay playsinline style="width:100%;border-radius:10px;"></video>
+                    <div class="face-status" id="face-status" style="border-color:#ef4444; color:#ef4444;">No Face Detected</div>
+                </div>
+                <div id="face-warnings" style="margin-bottom:12px;"></div>
+                <div style="text-align:center; display:flex; flex-direction:column; gap:16px; align-items:center;">
+                    <button class="btn btn-primary" onclick="startChallenges()" id="btn-start-challenges" disabled>Start Liveness Challenges →</button>
+                    <div id="selfie-upload-fallback" style="text-align:center; margin-top:20px; padding-top:20px; border-top:1px dashed var(--border); width:100%;">
+                        <p style="color:var(--muted); font-size:0.85rem; margin-bottom:12px;">
+                            📷 Having trouble with the camera? You can upload a photo of your face directly.
+                        </p>
+                        <button class="btn btn-outline" onclick="triggerSelfieUpload()" type="button">Upload Selfie Image</button>
+                        <input type="file" id="file-selfie" accept="image/*" style="display:none;" onchange="handleSelfieUpload(this)">
+                    </div>
+                </div>
+            </div>
+
+            <div id="selfie-phase-challenge" class="hidden">
+                <div class="webcam-container" style="max-width:480px; margin:0 auto 16px;">
+                    <video id="challenge-video" autoplay playsinline style="width:100%;border-radius:10px;"></video>
+                    <div class="challenge-overlay">
+                        <div class="challenge-text" id="challenge-instruction">Look STRAIGHT at the camera</div>
+                        <div class="challenge-progress" id="challenge-progress">1 / 4</div>
+                    </div>
+                </div>
+                <div style="text-align:center;">
+                    <div class="alert-info pulse" id="challenge-monitoring">🔍 Monitoring your pose automatically...</div>
+                    <button class="btn btn-outline btn-sm" onclick="skipLiveness()" id="btn-skip-liveness" style="display:none; margin-top:8px;">Having trouble? Skip liveness</button>
+                </div>
+            </div>
+
+            <div id="selfie-phase-verify" class="hidden">
+                <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; margin-bottom:16px;">
+                    <div>
+                        <p style="color:var(--muted); font-size:0.75rem; margin-bottom:6px;">Captured Selfie</p>
+                        <img id="selfie-preview" src="" alt="Selfie" style="width:160px; height:120px; object-fit:cover; border-radius:8px; border:1px solid var(--border);">
+                    </div>
+                    <div style="flex:1;">
+                        <div class="alert-success">✅ Liveness challenges passed! Click "Verify Identity" to match your face with your documents.</div>
+                    </div>
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <button class="btn btn-primary" onclick="verifyBiometrics()" id="btn-verify-bio">Verify Identity</button>
+                    <button class="btn btn-outline" onclick="retakeSelfie()">Re-take</button>
+                </div>
+            </div>
+
+            <div id="selfie-phase-done" class="hidden">
+                <div id="bio-result-banner" class="result-banner"></div>
+                <div class="scores-grid">
+                    <div class="score-card">
+                        <div class="score-label">Face Match</div>
+                        <div class="score-bar"><div class="score-fill" id="bar-face" style="background:#22c55e;width:0%"></div></div>
+                        <div class="score-val" id="val-face">—</div>
+                    </div>
+                    <div class="score-card">
+                        <div class="score-label">Liveness</div>
+                        <div class="score-bar"><div class="score-fill" id="bar-live" style="background:#22c55e;width:0%"></div></div>
+                        <div class="score-val" id="val-live">—</div>
+                    </div>
+                    <div class="score-card">
+                        <div class="score-label">Deepfake Risk</div>
+                        <div class="score-bar"><div class="score-fill" id="bar-deep" style="background:#22c55e;width:0%"></div></div>
+                        <div class="score-val" id="val-deep">—</div>
+                    </div>
+                </div>
+                <p id="bio-reasoning" style="color:var(--muted); font-size:0.82rem; font-style:italic; margin-bottom:16px;"></p>
+                <div id="bio-retry-wrap" class="hidden">
+                    <button class="btn btn-outline" onclick="retakeSelfie()">Re-verify Selfie</button>
+                </div>
+                <div id="bio-proceed-wrap" class="hidden">
+                    <button class="btn btn-primary" onclick="goToStep(2)">Proceed to Risk Assessment →</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- STEP 2: Risk & Compliance -->
+    <div id="pane-2" class="hidden">
+        <div class="kyc-card">
+            <h2>🛡 Risk Assessment & Compliance</h2>
+            <p class="sub">AI-powered risk scoring across 12 behavioral markers + AML/PEP sanctions screening.</p>
+            <div style="text-align:center; margin-bottom:24px;">
+                <button class="btn btn-primary" onclick="runRiskAssessment()" id="btn-run-risk">⚡ Run AI Risk Assessment</button>
+            </div>
+            <div id="risk-results" class="hidden">
+                <div class="risk-gauge">
+                    <div class="risk-score-num" id="risk-score-num">—</div>
+                    <div class="risk-level-badge" id="risk-level-badge">—</div>
+                    <p id="risk-explanation" style="color:var(--muted); font-size:0.82rem; margin-top:12px; max-width:500px; margin-left:auto; margin-right:auto;"></p>
+                </div>
+                <h3 style="font-family:var(--font-cond); font-size:0.85rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:12px;">Compliance Screening</h3>
+                <div class="compliance-grid">
+                    <div class="comp-badge" id="comp-sanctions">
+                        <div class="comp-label">OFAC Sanctions</div>
+                        <div class="comp-val">—</div>
+                    </div>
+                    <div class="comp-badge" id="comp-pep">
+                        <div class="comp-label">PEP Check</div>
+                        <div class="comp-val">—</div>
+                    </div>
+                    <div class="comp-badge" id="comp-overall">
+                        <div class="comp-label">Overall Status</div>
+                        <div class="comp-val">—</div>
+                    </div>
+                </div>
+                <div id="risk-proceed-wrap" class="hidden" style="margin-top:20px; text-align:center;">
+                    <button class="btn btn-primary" onclick="goToStep(3)">View Final Result →</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- STEP 3: Complete -->
+    <div id="pane-3" class="hidden">
+        <div class="kyc-card" style="text-align:center;">
+            <div id="final-icon" style="font-size:5rem; margin-bottom:16px;">⏳</div>
+            <h2 id="final-title" style="font-size:1.8rem; margin-bottom:8px;">Processing...</h2>
+            <p id="final-sub" style="color:var(--muted); margin-bottom:24px;"></p>
+            <div class="summary-grid" id="final-summary"></div>
+            <div id="final-explain" class="hidden" style="margin-bottom:20px;"></div>
+            <div id="final-actions"></div>
+        </div>
+    </div>
+</div><!-- end kyc-wrapper -->
+
+<script src="/js/api.js?v=11"></script>
+<script>
+// ─── Config ───────────────────────────────────────────────────────────────────
+// All eKYC calls go through TMS backend proxy — no separate port needed
+const EKYC_BASE = "/api/kyc/ekyc";
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let currentStep = 0;
+let kycSessionId = null;
+let docState = {
+    aadhaar: { front: null, back: null, extracted: null },
+    pan:     { front: null, back: null, extracted: null },
+    dl:      { front: null, back: null, extracted: null },
+};
+let currentDoc = "aadhaar";
+let selfieBlob = null;
+let biometricResult = null;
+let riskResult = null;
+let complianceResult = null;
+let stream = null;
+let faceDetectInterval = null;
+let challengeInterval = null;
+let skipTimer = null;
+let challengeIdx = 0;
+const CHALLENGES = [
+    { direction: "straight", instruction: "Look STRAIGHT at the camera" },
+    { direction: "left",     instruction: "Slowly turn your head to the LEFT" },
+    { direction: "right",    instruction: "Slowly turn your head to the RIGHT" },
+    { direction: "straight", instruction: "Look STRAIGHT again" },
+];
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+if (!isLoggedIn() || getRole() !== "driver") {
+    window.location.href = "/";
+}
+document.getElementById("nav-name").textContent = getName() || "Driver";
+
+// Check if already verified — redirect to dashboard
+(async () => {
+    try {
+        const s = await getKycStatusFromServer();
+        if (s.kyc_status === "verified") {
+            window.location.href = "/pages/driver.html";
+        }
+    } catch(e) {
+        // If server unreachable, stay on page
+    }
+})();
+
+// Create eKYC session via TMS proxy — retries while eKYC is starting up
+(async () => {
+    for (let attempt = 1; attempt <= 8; attempt++) {
+        try {
+            const pingResp = await fetch("/api/kyc/ekyc/ping");
+            const ping = await pingResp.json();
+
+            if (!ping.available) {
+                showMsg("doc-msg", "info",
+                    `⏳ eKYC service is starting... (${attempt}/8) — please wait`
+                );
+                await new Promise(r => setTimeout(r, 3000));
+                continue;
+            }
+
+            // eKYC is up — create session
+            const resp = await fetch(`${EKYC_BASE}/sessions`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ user_id: `driver_${getUserId()}` })
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.detail || `HTTP ${resp.status}`);
+            }
+            const data = await resp.json();
+            kycSessionId = data.id;
+            document.getElementById("doc-msg").classList.add("hidden");
+            return; // success — stop retrying
+
+        } catch(e) {
+            if (attempt === 8) {
+                showMsg("doc-msg", "error",
+                    `❌ Could not start KYC session after ${attempt} attempts: ${e.message}<br>` +
+                    `Restart TMS and try again.`
+                );
+            } else {
+                await new Promise(r => setTimeout(r, 2000));
+            }
+        }
+    }
+})();
+
+// ─── Stepper ──────────────────────────────────────────────────────────────────
+function goToStep(n) {
+    if (n > currentStep) return; // can only go back
+    currentStep = n;
+    renderStepper();
+    [0,1,2,3].forEach(i => {
+        document.getElementById(`pane-${i}`).classList.toggle("hidden", i !== n);
+    });
+    if (n === 1) initSelfieCamera();
+}
+
+function renderStepper() {
+    const labels = ["Documents","Selfie","Risk & Compliance","Complete"];
+    const icons  = ["📄","🤳","🛡","✅"];
+    for (let i = 0; i < 4; i++) {
+        const sc = document.getElementById(`sc-${i}`);
+        const sl = document.getElementById(`sl-${i}`);
+        sc.className = "step-circle " + (i < currentStep ? "done" : i === currentStep ? "active" : "pending");
+        sc.textContent = i < currentStep ? "✓" : icons[i];
+        sl.className = "step-label" + (i === currentStep ? " active" : "");
+        if (i < 3) {
+            document.getElementById(`line-${i}`).style.background = i < currentStep ? "#10b981" : "var(--border)";
+        }
+    }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function showMsg(containerId, type, msg) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    el.className = `alert-${type}`;
+    el.innerHTML = msg;
+    el.classList.remove("hidden");
+}
+
+function triggerFileInput(doc, side) {
+    const input = document.getElementById(`file-${doc}-${side}`);
+    if (!input) return;
+    input.value = "";
+    input.click();
+}
+
+function handleFileSelect(doc, side, input) {
+    if (!input.files[0]) return;
+    const file = input.files[0];
+    const url = URL.createObjectURL(file);
+    docState[doc][side] = { file, url };
+    renderSlot(doc, side, url);
+}
+
+function renderSlot(doc, side, url) {
+    const slot = document.getElementById(`slot-${doc}-${side}`);
+    slot.classList.add("has-file");
+    slot.innerHTML = `
+        <input type="file" id="file-${doc}-${side}" accept="image/*" onchange="handleFileSelect('${doc}','${side}',this)">
+        <div class="slot-label">${side.toUpperCase()} SIDE</div>
+        <img src="${url}" class="slot-preview" alt="${side}">
+        <button class="slot-remove" onclick="removeSlot('${doc}','${side}',event)">✕ Remove</button>
+    `;
+}
+
+function removeSlot(doc, side, e) {
+    e.stopPropagation();
+    docState[doc][side] = null;
+    docState[doc].extracted = null;
+    const slot = document.getElementById(`slot-${doc}-${side}`);
+    if (!slot) return;
+    slot.classList.remove("has-file");
+    const icons = { aadhaar:"🪪", pan:"💳", dl:"🚗" };
+    const labels = { front:"Front Side", back:"Back Side" };
+    slot.innerHTML = `
+        <input type="file" id="file-${doc}-${side}" accept="image/*" onchange="handleFileSelect('${doc}','${side}',this)">
+        <div class="slot-label">${labels[side]}</div>
+        <div class="slot-icon">${icons[doc]}</div>
+        <div class="slot-text">Click to upload or drag &amp; drop</div>
+    `;
+    slot.onclick = () => triggerFileInput(doc, side);
+    const extractedBox = document.getElementById(`extracted-${doc}`);
+    if (extractedBox) extractedBox.classList.add("hidden");
+    updateDocProgress();
+}
+
+function switchDoc(doc) {
+    ["aadhaar","pan","dl"].forEach(d => {
+        document.getElementById(`doc-${d}`).classList.toggle("hidden", d !== doc);
+        const btn = document.getElementById(`dnav-${d}`);
+        btn.className = "doc-nav-btn" + (d === doc ? " active" : (docState[d].extracted ? " done" : ""));
+    });
+    currentDoc = doc;
+}
+
+function updateDocProgress() {
+    const done = ["aadhaar","pan","dl"].filter(d => {
+        const ext = docState[d].extracted;
+        if (!ext) return false;
+        const fields = ext.extracted_fields || {};
+        return getMissingRequiredFields(d, fields).length === 0;
+    }).length;
+    document.getElementById("doc-progress-text").textContent = `${done} / 3 documents extracted`;
+    document.getElementById("btn-proceed-docs").disabled = done < 3;
+    // Update doc nav badges
+    ["aadhaar","pan","dl"].forEach(d => {
+        const btn = document.getElementById(`dnav-${d}`);
+        if (docState[d].extracted) btn.className = "doc-nav-btn done";
+    });
+}
+
+function getMissingRequiredFields(doc, fields = null) {
+    const f = fields || docState[doc].extracted?.extracted_fields || {};
+    if (doc === "aadhaar") {
+        const missing = ["name","dob","id_number"].filter(k => !f[k]);
+        const digits = String(f.id_number || "").replace(/\D/g, "");
+        if (f.id_number && digits.length !== 12) missing.push("12-digit aadhaar_number");
+        return missing;
+    }
+    if (doc === "pan") {
+        return ["id_number","name","dob"].filter(k => !f[k]);
+    }
+    if (doc === "dl") {
+        return ["id_number","name","dob"].filter(k => !f[k]);
+    }
+    return [];
+}
+
+function buildReviewDetails(reason) {
+    const docDetails = {};
+    ["aadhaar","pan","dl"].forEach(doc => {
+        const extracted = docState[doc].extracted || {};
+        docDetails[doc] = {
+            fields: extracted.extracted_fields || {},
+            validation_errors: extracted.validation_errors || [],
+            raw_text: extracted.raw_text || ""
+        };
+    });
+    return {
+        reason,
+        documents: docDetails,
+        checks: validateDocumentConsistency()
+    };
+}
+
+async function submitKycManualReview(reason, details = null) {
+    if (!kycSessionId) {
+        showMsg("doc-msg", "warn", "KYC session is still initializing. Please try again.");
+        return;
+    }
+    const aFields = docState.aadhaar.extracted?.extracted_fields || {};
+    const pFields = docState.pan.extracted?.extracted_fields || {};
+    const dFields = docState.dl.extracted?.extracted_fields || {};
+    const licenseNumber = dFields.id_number || dFields.license_number || null;
+    const aadhaarNumber = aFields.id_number || null;
+    const panNumber = pFields.id_number || null;
+    const kycName = aFields.name || pFields.name || dFields.name || null;
+    const kycDob = aFields.dob || pFields.dob || dFields.dob || null;
+
+    try {
+        await completeKyc(
+            kycSessionId,
+            "manual_review",
+            licenseNumber,
+            aadhaarNumber,
+            panNumber,
+            kycName,
+            kycDob,
+            reason,
+            details || buildReviewDetails(reason)
+        );
+        localStorage.setItem("fb_kyc_status", "manual_review");
+        biometricResult = { is_match: true };
+        riskResult = { risk_score: 50, risk_level: "high", requires_manual_review: true, explanation: reason };
+        complianceResult = { overall_status: "manual_review" };
+        currentStep = 3;
+        renderStepper();
+        [0,1,2,3].forEach(i => {
+            document.getElementById(`pane-${i}`).classList.toggle("hidden", i !== 3);
+        });
+        await showFinalResult();
+    } catch (e) {
+        showMsg("doc-msg", "error", `Admin review request failed: ${e.message}`);
+    }
+}
+
+window.requestAdminReviewFromDocs = function(reason) {
+    submitKycManualReview(reason || "Document extraction requires admin review");
+};
+
+// ─── Document Extraction ──────────────────────────────────────────────────────
+async function extractDoc(doc) {
+    if (!kycSessionId) {
+        // Session not ready yet — try to create it now
+        showMsg("doc-msg", "info", "⏳ Initializing KYC session, please wait...");
+        try {
+            const resp = await fetch(`${EKYC_BASE}/sessions`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ user_id: `driver_${getUserId()}` })
+            });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            kycSessionId = data.id;
+            document.getElementById("doc-msg").classList.add("hidden");
+        } catch(e) {
+            showMsg("doc-msg", "error",
+                `❌ eKYC service not ready. Please wait a moment and try again.<br>` +
+                `If this keeps happening, restart TMS: <code>uvicorn backend.main:app --port 8000</code>`
+            );
+            return;
+        }
+    }
+    if (!docState[doc].front) {
+        showMsg("doc-msg", "warn", "⚠ Please upload the front side first.");
+        return;
+    }
+
+    const btn = document.getElementById(`btn-extract-${doc}`);
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Processing OCR...';
+    showMsg("doc-msg", "info", "⏳ Extracting document data...");
+
+    try {
+        // Extract front
+        const form1 = new FormData();
+        form1.append("session_id", kycSessionId);
+        form1.append("file", docState[doc].front.file);
+        form1.append("side", "front");
+        form1.append("source", doc);
+        const r1 = await fetch(`${EKYC_BASE}/documents/extract`, { method:"POST", body:form1 });
+        let extracted = await r1.json();
+        if (!r1.ok) throw new Error(extracted.detail || "OCR failed");
+
+        // Extract DL back side when front side missed DOB or the licence number.
+        if (doc === "dl" && (!extracted?.extracted_fields?.dob || !extracted?.extracted_fields?.id_number) && docState[doc].back) {
+            const form2 = new FormData();
+            form2.append("session_id", kycSessionId);
+            form2.append("file", docState[doc].back.file);
+            form2.append("side", "back");
+            form2.append("source", doc);
+            const r2 = await fetch(`${EKYC_BASE}/documents/extract`, { method:"POST", body:form2 });
+            if (r2.ok) {
+                const back = await r2.json();
+                // Only use back side data to fill missing fields, keep front side name/dob
+                if (!extracted.extracted_fields) extracted.extracted_fields = {};
+                const backFields = back.extracted_fields || {};
+                for (const k of Object.keys(backFields)) {
+                    if (!extracted.extracted_fields[k] && backFields[k]) {
+                        extracted.extracted_fields[k] = backFields[k];
+                    }
+                }
+                if (extracted.extracted_fields.id_number && !extracted.extracted_fields.license_number) {
+                    extracted.extracted_fields.license_number = extracted.extracted_fields.id_number;
+                }
+                const dlMissing = ["id_number","name","dob"].filter(k => !extracted.extracted_fields[k]);
+                extracted.validation_errors = (extracted.validation_errors || [])
+                    .filter(e => !String(e).toLowerCase().includes("missing driving license fields"));
+                if (dlMissing.length) {
+                    extracted.validation_errors.push(`Missing driving license fields: ${dlMissing.join(", ")}`);
+                }
+            }
+        }
+
+        docState[doc].extracted = extracted;
+
+        // Check if mandatory fields are missing — likely wrong side uploaded
+        const fields = extracted.extracted_fields || {};
+        const rawText = (extracted.raw_text || "").toLowerCase();
+
+        // Detect Aadhaar back side: has address keywords but no name/dob
+        const isAadhaarBackSide = doc === "aadhaar" &&
+            !fields.name && !fields.dob &&
+            (rawText.includes("vtc:") || rawText.includes("pin code") ||
+             rawText.includes("district") || rawText.includes("mobile:") ||
+             rawText.includes("mf7") || rawText.includes("enrollment no"));
+
+        if (isAadhaarBackSide) {
+            showMsg("doc-msg", "error",
+                `❌ You uploaded the <strong>back/address side</strong> of the Aadhaar card.<br><br>` +
+                `Please upload the <strong>FRONT side</strong> — the side that shows:<br>` +
+                `&nbsp;&nbsp;• Your <strong>photo</strong><br>` +
+                `&nbsp;&nbsp;• Your <strong>name</strong><br>` +
+                `&nbsp;&nbsp;• Date of Birth<br>` +
+                `&nbsp;&nbsp;• 12-digit Aadhaar number`
+            );
+            docState[doc].extracted = null;
+            return;
+        }
+
+        const missingAadhaarFields = doc === "aadhaar" ? getMissingRequiredFields("aadhaar", fields) : [];
+        const missingPanFields = doc === "pan" ? getMissingRequiredFields("pan", fields) : [];
+        const missingDlFields = doc === "dl" ? getMissingRequiredFields("dl", fields) : [];
+        const adminReviewButton = (reason) =>
+            `<br><button class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="requestAdminReviewFromDocs('${reason.replace(/'/g, "\\'")}')">Send to Admin Review</button>`;
+        if (missingAadhaarFields.length) {
+            showMsg("doc-msg", "error",
+                `Aadhaar details missing: <strong>${missingAadhaarFields.join(", ")}</strong>. Please upload a clearer front/photo side.` +
+                adminReviewButton("Aadhaar mandatory fields were not extracted")
+            );
+            return;
+        }
+        if (missingPanFields.length) {
+            renderExtracted(doc, extracted);
+            showMsg("doc-msg", "warn",
+                `⚠ PAN front side detected, but OCR missed: <strong>${missingPanFields.join(", ")}</strong>. ` +
+                `Please use a clearer image where the lower text is readable.` +
+                adminReviewButton("PAN mandatory fields were not extracted")
+            );
+            return;
+        }
+
+        if (missingDlFields.length) {
+            renderExtracted(doc, extracted);
+            const needsBackDob = missingDlFields.includes("dob") && !docState[doc].back;
+            showMsg("doc-msg", "warn",
+                needsBackDob
+                    ? `Driving License DOB was not found on the front side. Please upload the back side and extract again.`
+                    : `Driving License details missing: <strong>${missingDlFields.join(", ")}</strong>. Please upload a clearer image.` +
+                      adminReviewButton("Driving License mandatory fields were not extracted")
+            );
+            return;
+        }
+
+        renderExtracted(doc, extracted);
+        showMsg("doc-msg", "success", `✅ ${doc.toUpperCase()} extracted successfully!`);
+        updateDocProgress();
+    } catch(e) {
+        showMsg("doc-msg", "error", `❌ Extraction failed: ${e.message}`);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = `Extract ${doc === "aadhaar" ? "Aadhaar" : doc === "pan" ? "PAN Card" : "Driving License"}`;
+    }
+}
+
+function renderExtracted(doc, data) {
+    const fields = { ...(data.extracted_fields || {}) };
+    if (doc === "dl" && !fields.license_number && fields.id_number) {
+        fields.license_number = fields.id_number;
+    }
+    const keysByDoc = {
+        aadhaar: ["name","dob","id_number"],
+        pan: ["id_number","name","father_name","dob"],
+        dl: ["license_number","name","dob","address"]
+    };
+    const keys = keysByDoc[doc] || ["name","dob","id_number"];
+    const box = document.getElementById(`extracted-${doc}`);
+
+    // Confidence: PaddleOCR sometimes returns 0.0 even when text is extracted.
+    // If we have fields, treat it as at least 60% confident.
+    const hasFields = keys.some(k => fields[k]);
+    const rawConf = data.ocr_confidence || 0;
+    const displayConf = hasFields && rawConf === 0 ? "—" : Math.round(rawConf * 100) + "%";
+
+    // Filter out the low-confidence warning if we actually got fields
+    const validationErrors = (data.validation_errors || []).filter(e => {
+        if (hasFields && e.toLowerCase().includes("low ocr confidence")) return false;
+        return true;
+    });
+
+    const fieldRows = keys.filter(k => fields[k]).map(k => `
+        <div class="field-item">
+            <div class="field-key">${k.replace("_"," ").toUpperCase()}</div>
+            <div class="field-val">${fields[k]}</div>
+        </div>`).join("");
+
+    const noFieldsMsg = !hasFields
+        ? `<div class="alert-warn" style="margin-top:8px; font-size:0.78rem;">
+               ⚠ No fields extracted. Try uploading a clearer, well-lit image of the document.
+           </div>`
+        : "";
+
+    box.innerHTML = `
+        <div class="extracted-box">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <span style="color:${hasFields ? '#10b981' : '#f59e0b'}; font-size:0.8rem; font-weight:700;">
+                    ${hasFields ? '✓' : '⚠'} Extracted — Confidence: ${displayConf}
+                </span>
+                <span style="font-size:0.72rem; color:var(--muted); font-family:var(--font-mono);">
+                    ${data.doc_type ? data.doc_type.replace("_"," ").toUpperCase() : ""}
+                </span>
+                ${data.is_tampered ? '<span style="color:#ef4444; font-size:0.75rem;">⚠ Tamper detected</span>' : ''}
+            </div>
+            ${hasFields ? `<div class="extracted-fields">${fieldRows}</div>` : noFieldsMsg}
+            ${validationErrors.length ? `<div class="alert-warn" style="margin-top:8px; font-size:0.78rem;">${validationErrors.join("<br>")}</div>` : ""}
+        </div>`;
+    box.classList.remove("hidden");
+}
+
+function validateDocumentConsistency() {
+    const aFields = docState.aadhaar.extracted?.extracted_fields || {};
+    const pFields = docState.pan.extracted?.extracted_fields || {};
+    const dFields = docState.dl.extracted?.extracted_fields || {};
+    const values = {
+        aadhaar: { name: (aFields.name || "").trim(), dob: (aFields.dob || "").trim() },
+        pan: { name: (pFields.name || "").trim(), dob: (pFields.dob || "").trim() },
+        dl: { name: (dFields.name || "").trim(), dob: (dFields.dob || "").trim() }
+    };
+    const nameTokens = (n) => n
+        .toUpperCase()
+        .replace(/[^A-Z ]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .split(" ")
+        .filter(Boolean);
+    const compactName = (n) => nameTokens(n).join("");
+    const sortedName = (n) => nameTokens(n).sort().join("");
+    const namesSame = (left, right) => {
+        const a = compactName(left);
+        const b = compactName(right);
+        if (!a || !b) return false;
+        if (a === b) return true;
+        return sortedName(left) === sortedName(right);
+    };
+    const normDob = (d) => {
+        const parts = String(d || "").match(/\d+/g) || [];
+        if (parts.length >= 3) {
+            let [a, b, c] = parts;
+            if (a.length === 4) {
+                return c.padStart(2, "0") + b.padStart(2, "0") + a;
+            }
+            return a.padStart(2, "0") + b.padStart(2, "0") + c.padStart(4, "0");
+        }
+        return String(d || "").replace(/\D/g, "");
+    };
+    const normalized = {
+        aadhaar: { name: compactName(values.aadhaar.name), dob: normDob(values.aadhaar.dob) },
+        pan: { name: compactName(values.pan.name), dob: normDob(values.pan.dob) },
+        dl: { name: compactName(values.dl.name), dob: normDob(values.dl.dob) }
+    };
+    return {
+        namesMatch: namesSame(values.aadhaar.name, values.pan.name) && namesSame(values.pan.name, values.dl.name),
+        dobsMatch: normalized.aadhaar.dob === normalized.pan.dob && normalized.pan.dob === normalized.dl.dob,
+        values,
+        normalized
+    };
+}
+
+function proceedToSelfie() {
+    const consistency = validateDocumentConsistency();
+
+    if (!consistency.namesMatch || !consistency.dobsMatch) {
+        let errorMsg = "<strong>Document Cross-Comparison Mismatch:</strong><br><br>";
+        if (!consistency.namesMatch) {
+            errorMsg += `<strong>Names do not match:</strong><br>` +
+                        `Aadhaar: <em>${consistency.values.aadhaar.name || 'Missing'}</em><br>` +
+                        `PAN: <em>${consistency.values.pan.name || 'Missing'}</em><br>` +
+                        `Driving License: <em>${consistency.values.dl.name || 'Missing'}</em><br><br>`;
+        }
+        if (!consistency.dobsMatch) {
+            errorMsg += `<strong>DOBs do not match:</strong><br>` +
+                        `Aadhaar: <em>${consistency.values.aadhaar.dob || 'Missing'}</em><br>` +
+                        `PAN: <em>${consistency.values.pan.dob || 'Missing'}</em><br>` +
+                        `Driving License: <em>${consistency.values.dl.dob || 'Missing'}</em><br><br>`;
+        }
+        errorMsg += "<strong>You cannot proceed to selfie verification until all three cards have the same name and DOB.</strong>";
+        showMsg("doc-msg", "error", errorMsg);
+        return;
+    }
+
+    document.getElementById("doc-msg").classList.add("hidden");
+    currentStep = 1;
+    renderStepper();
+    document.getElementById("pane-0").classList.add("hidden");
+    document.getElementById("pane-1").classList.remove("hidden");
+    initSelfieCamera();
+}
+
+// --- Selfie / Biometric ───────────────────────────────────────────────────────
+async function initSelfieCamera() {
+    const selfieMsg = document.getElementById("selfie-msg");
+    if (selfieMsg) selfieMsg.classList.add("hidden");
+    try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error("Camera API (getUserMedia) is not supported in this browser or context. Please upload a selfie image instead.");
+        }
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode:"user", width:480, height:360 } });
+        const video = document.getElementById("selfie-video");
+        video.srcObject = stream;
+        startFaceDetection();
+    } catch(e) {
+        console.error("Camera access error:", e);
+        showMsg("selfie-msg", "error", `❌ Camera access failed: ${e.message || e}. You can upload a selfie image below.`);
+    }
+}
+
+function triggerSelfieUpload() {
+    document.getElementById("file-selfie").click();
+}
+
+function handleSelfieUpload(input) {
+    if (!input.files[0]) return;
+    selfieBlob = input.files[0];
+    stopCamera();
+    showVerifyPhase(selfieBlob);
+}
+
+function stopCamera() {
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    clearInterval(faceDetectInterval);
+    clearInterval(challengeInterval);
+    clearTimeout(skipTimer);
+}
+
+async function startFaceDetection() {
+    faceDetectInterval = setInterval(async () => {
+        const video = document.getElementById("selfie-video");
+        if (!video || !video.srcObject) return;
+        const blob = await captureFrame(video);
+        if (!blob) return;
+        try {
+            const form = new FormData();
+            form.append("image", blob, "frame.jpg");
+            const r = await fetch(`${EKYC_BASE}/face/detect`, { method:"POST", body:form });
+            const data = await r.json();
+            const status = document.getElementById("face-status");
+            const btn = document.getElementById("btn-start-challenges");
+            if (data.face_detected) {
+                status.style.borderColor = "#22c55e";
+                status.style.color = "#22c55e";
+                status.textContent = "✓ Face Detected";
+                btn.disabled = false;
+            } else {
+                status.style.borderColor = "#ef4444";
+                status.style.color = "#ef4444";
+                status.textContent = "No Face Detected";
+                btn.disabled = true;
+            }
+            const warnings = document.getElementById("face-warnings");
+            warnings.innerHTML = (data.warnings||[]).map(w => `<div class="alert-warn" style="font-size:0.78rem;">⚠ ${w}</div>`).join("");
+        } catch(e) {}
+    }, 1500);
+}
+
+async function captureFrame(video) {
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 480;
+    canvas.height = video.videoHeight || 360;
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    return new Promise(res => canvas.toBlob(res, "image/jpeg", 0.85));
+}
+
+function startChallenges() {
+    clearInterval(faceDetectInterval);
+    challengeIdx = 0;
+    document.getElementById("selfie-phase-detect").classList.add("hidden");
+    document.getElementById("selfie-phase-challenge").classList.remove("hidden");
+
+    // Attach stream to challenge video
+    const cv = document.getElementById("challenge-video");
+    cv.srcObject = stream;
+
+    updateChallengeUI();
+    challengeInterval = setInterval(autoCaptureChallenge, 1200);
+    skipTimer = setTimeout(() => {
+        document.getElementById("btn-skip-liveness").style.display = "inline-block";
+    }, 15000);
+}
+
+function updateChallengeUI() {
+    document.getElementById("challenge-instruction").textContent = CHALLENGES[challengeIdx].instruction;
+    document.getElementById("challenge-progress").textContent = `${challengeIdx + 1} / ${CHALLENGES.length}`;
+}
+
+async function autoCaptureChallenge() {
+    const video = document.getElementById("challenge-video");
+    if (!video || !video.srcObject) return;
+    const blob = await captureFrame(video);
+    if (!blob) return;
+    const direction = CHALLENGES[challengeIdx].direction;
+    try {
+        const form = new FormData();
+        form.append("image", blob, "frame.jpg");
+        form.append("direction", direction);
+        const r = await fetch(`${EKYC_BASE}/face/challenge`, { method:"POST", body:form });
+        const data = await r.json();
+        if (data.passed) {
+            if (challengeIdx === CHALLENGES.length - 1) {
+                clearInterval(challengeInterval);
+                clearTimeout(skipTimer);
+                selfieBlob = blob;
+                showVerifyPhase(blob);
+            } else {
+                challengeIdx++;
+                updateChallengeUI();
+            }
+        }
+    } catch(e) {}
+}
+
+async function skipLiveness() {
+    clearInterval(challengeInterval);
+    clearTimeout(skipTimer);
+    const video = document.getElementById("challenge-video");
+    selfieBlob = await captureFrame(video);
+    showVerifyPhase(selfieBlob);
+}
+
+function showVerifyPhase(blob) {
+    document.getElementById("selfie-phase-detect").classList.add("hidden");
+    document.getElementById("selfie-phase-challenge").classList.add("hidden");
+    document.getElementById("selfie-phase-verify").classList.remove("hidden");
+    const url = URL.createObjectURL(blob);
+    document.getElementById("selfie-preview").src = url;
+}
+
+function retakeSelfie() {
+    selfieBlob = null;
+    challengeIdx = 0;
+    document.getElementById("selfie-phase-done").classList.add("hidden");
+    document.getElementById("selfie-phase-verify").classList.add("hidden");
+    document.getElementById("selfie-phase-challenge").classList.add("hidden");
+    document.getElementById("selfie-phase-detect").classList.remove("hidden");
+    if (!stream) initSelfieCamera();
+    else startFaceDetection();
+}
+
+async function verifyBiometrics() {
+    if (!selfieBlob) return;
+    if (!kycSessionId) { alert("No eKYC session."); return; }
+
+    // Get best doc image (prefer aadhaar front)
+    const bestDoc = docState.aadhaar.front || docState.pan.front || docState.dl.front;
+    if (!bestDoc) { alert("No document image found."); return; }
+
+    // Try to use face crop from extracted data
+    let docImageBlob = bestDoc.file;
+    const bestExtracted = docState.aadhaar.extracted || docState.pan.extracted || docState.dl.extracted;
+    if (bestExtracted && bestExtracted.face_image && bestExtracted.face_image.includes(",")) {
+        try {
+            const parts = bestExtracted.face_image.split(",");
+            const mime = parts[0].split(":")[1].split(";")[0];
+            const bytes = atob(parts[1]);
+            const arr = new Uint8Array(bytes.length);
+            for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+            docImageBlob = new Blob([arr], { type: mime });
+        } catch(e) {}
+    }
+
+    const btn = document.getElementById("btn-verify-bio");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Verifying...';
+
+    try {
+        const form = new FormData();
+        form.append("session_id", kycSessionId);
+        form.append("doc_image", docImageBlob, "doc.jpg");
+        form.append("selfie", selfieBlob, "selfie.jpg");
+        const r = await fetch(`${EKYC_BASE}/biometrics/verify`, { method:"POST", body:form });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || "Biometric verification failed");
+        biometricResult = data;
+        stopCamera();
+        showBiometricResult(data);
+    } catch(e) {
+        alert("Biometric verification failed: " + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = "Verify Identity";
+    }
+}
+
+function showBiometricResult(data) {
+    document.getElementById("selfie-phase-verify").classList.add("hidden");
+    document.getElementById("selfie-phase-done").classList.remove("hidden");
+
+    const banner = document.getElementById("bio-result-banner");
+    if (data.is_match) {
+        banner.style.background = "rgba(16,185,129,0.1)";
+        banner.style.borderColor = "#10b981";
+        banner.innerHTML = `<span class="result-icon">✅</span><div><div class="result-title" style="color:#10b981;">IDENTITY VERIFIED</div><div class="result-sub">Face match confirmed with liveness detection</div></div>`;
+    } else {
+        banner.style.background = "rgba(239,68,68,0.1)";
+        banner.style.borderColor = "#ef4444";
+        banner.innerHTML = `<span class="result-icon">❌</span><div><div class="result-title" style="color:#ef4444;">VERIFICATION FAILED</div><div class="result-sub">Face mismatch or liveness issue detected</div></div>`;
+    }
+
+    const faceScore = Math.round((data.face_match_score||0)*100);
+    const liveScore = Math.round((data.liveness_score||0)*100);
+    const deepScore = Math.round((data.deepfake_score||0)*100);
+    const safeDeep = 100 - deepScore;
+
+    document.getElementById("bar-face").style.width = faceScore + "%";
+    document.getElementById("bar-face").style.background = faceScore >= 70 ? "#22c55e" : faceScore >= 40 ? "#f59e0b" : "#ef4444";
+    document.getElementById("val-face").textContent = faceScore + "%";
+    document.getElementById("val-face").style.color = faceScore >= 70 ? "#22c55e" : faceScore >= 40 ? "#f59e0b" : "#ef4444";
+
+    document.getElementById("bar-live").style.width = liveScore + "%";
+    document.getElementById("bar-live").style.background = liveScore >= 70 ? "#22c55e" : liveScore >= 40 ? "#f59e0b" : "#ef4444";
+    document.getElementById("val-live").textContent = liveScore + "%";
+    document.getElementById("val-live").style.color = liveScore >= 70 ? "#22c55e" : liveScore >= 40 ? "#f59e0b" : "#ef4444";
+
+    document.getElementById("bar-deep").style.width = safeDeep + "%";
+    document.getElementById("bar-deep").style.background = safeDeep >= 70 ? "#22c55e" : safeDeep >= 40 ? "#f59e0b" : "#ef4444";
+    document.getElementById("val-deep").textContent = safeDeep + "% safe";
+    document.getElementById("val-deep").style.color = safeDeep >= 70 ? "#22c55e" : safeDeep >= 40 ? "#f59e0b" : "#ef4444";
+
+    document.getElementById("bio-reasoning").textContent = data.confidence_reasoning || "";
+
+    if (data.is_match) {
+        document.getElementById("bio-proceed-wrap").classList.remove("hidden");
+        currentStep = 2;
+        renderStepper();
+    } else {
+        document.getElementById("bio-retry-wrap").classList.remove("hidden");
+    }
+}
+
+// ─── Risk & Compliance ────────────────────────────────────────────────────────
+async function runRiskAssessment() {
+    if (!kycSessionId || !biometricResult) {
+        alert("Complete biometric verification first.");
+        return;
+    }
+    const btn = document.getElementById("btn-run-risk");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Analyzing Risk Vectors...';
+
+    const bestExtracted = docState.aadhaar.extracted || docState.pan.extracted || docState.dl.extracted;
+    const docResult = bestExtracted || {};
+    const extractedFields = docResult.extracted_fields || {};
+
+    try {
+        const [riskResp, compResp] = await Promise.all([
+            fetch(`${EKYC_BASE}/risk/assess`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    session_id: kycSessionId,
+                    doc_result: docResult,
+                    biometric_result: biometricResult,
+                    behavioral: { session_duration_ms: 0.4, retry_count: 0, device_anomaly: 0.0, ip_risk: 0.0 }
+                })
+            }),
+            fetch(`${EKYC_BASE}/compliance/screen`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ session_id: kycSessionId, extracted_fields: extractedFields, country_code: "IN" })
+            })
+        ]);
+
+        riskResult = await riskResp.json();
+        complianceResult = await compResp.json();
+
+        renderRiskResults(riskResult, complianceResult);
+        currentStep = 3;
+        renderStepper();
+    } catch(e) {
+        alert("Risk assessment failed: " + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = "⚡ Run AI Risk Assessment";
+    }
+}
+
+function renderRiskResults(risk, compliance) {
+    document.getElementById("risk-results").classList.remove("hidden");
+
+    const riskColors = { low:"#22c55e", medium:"#f59e0b", high:"#f97316", critical:"#ef4444" };
+    const color = riskColors[risk.risk_level] || "#94a3b8";
+
+    document.getElementById("risk-score-num").textContent = (risk.risk_score||0).toFixed(1);
+    document.getElementById("risk-score-num").style.color = color;
+
+    const badge = document.getElementById("risk-level-badge");
+    badge.textContent = (risk.risk_level||"unknown").toUpperCase();
+    badge.style.background = color + "22";
+    badge.style.color = color;
+    badge.style.border = `1px solid ${color}`;
+
+    document.getElementById("risk-explanation").textContent = risk.explanation || "";
+
+    // Compliance
+    const sanctions = document.getElementById("comp-sanctions");
+    sanctions.style.borderColor = compliance.is_sanctioned ? "#ef4444" : "#10b981";
+    sanctions.querySelector(".comp-val").textContent = compliance.is_sanctioned ? "⚠ MATCH FOUND" : "✓ CLEAR";
+    sanctions.querySelector(".comp-val").style.color = compliance.is_sanctioned ? "#ef4444" : "#10b981";
+
+    const pep = document.getElementById("comp-pep");
+    pep.style.borderColor = compliance.is_pep ? "#f59e0b" : "#10b981";
+    pep.querySelector(".comp-val").textContent = compliance.is_pep ? "⚠ PEP DETECTED" : "✓ CLEAR";
+    pep.querySelector(".comp-val").style.color = compliance.is_pep ? "#f59e0b" : "#10b981";
+
+    const overall = document.getElementById("comp-overall");
+    const isOk = compliance.overall_status === "clear";
+    overall.style.borderColor = isOk ? "#10b981" : "#f59e0b";
+    overall.querySelector(".comp-val").textContent = (compliance.overall_status||"").replace("_"," ").toUpperCase();
+    overall.querySelector(".comp-val").style.color = isOk ? "#10b981" : "#f59e0b";
+
+    document.getElementById("risk-proceed-wrap").classList.remove("hidden");
+}
+
+// ─── Final Result ─────────────────────────────────────────────────────────────
+async function goToStep(n) {
+    if (n === 3) {
+        await showFinalResult();
+    }
+    currentStep = n;
+    renderStepper();
+    [0,1,2,3].forEach(i => {
+        document.getElementById(`pane-${i}`).classList.toggle("hidden", i !== n);
+    });
+}
+
+async function showFinalResult() {
+    // Determine outcome
+    let outcome = "approved";
+    let outcomeColor = "#10b981";
+    let outcomeIcon = "🎉";
+    let outcomeTitle = "KYC APPROVED";
+    let outcomeSub = "Your identity has been verified. You can now bid on loads.";
+
+    if (!biometricResult || !biometricResult.is_match) {
+        outcome = "rejected";
+    } else if (riskResult) {
+        if (riskResult.risk_level === "critical" || complianceResult?.is_sanctioned) {
+            outcome = "rejected";
+        } else if (riskResult.requires_manual_review || riskResult.risk_level === "high") {
+            outcome = "manual_review";
+        }
+    }
+
+    if (outcome === "rejected") {
+        outcomeColor = "#ef4444"; outcomeIcon = "❌";
+        outcomeTitle = "KYC REJECTED";
+        outcomeSub = "Your verification could not be completed. Please contact support.";
+    } else if (outcome === "manual_review") {
+        outcomeColor = "#f59e0b"; outcomeIcon = "⏳";
+        outcomeTitle = "UNDER REVIEW";
+        outcomeSub = "Your KYC is flagged for manual review. You will be notified once approved.";
+    }
+
+    // Extract details from documents
+    const licenseNumber = docState.dl.extracted?.extracted_fields?.id_number || null;
+    const aadhaarNumber = docState.aadhaar.extracted?.extracted_fields?.id_number || null;
+    const panNumber = docState.pan.extracted?.extracted_fields?.id_number || null;
+    const kycName = docState.aadhaar.extracted?.extracted_fields?.name || null;
+    const kycDob = docState.aadhaar.extracted?.extracted_fields?.dob || null;
+
+    // Notify TMS backend
+    try {
+        await completeKyc(kycSessionId, outcome, licenseNumber, aadhaarNumber, panNumber, kycName, kycDob);
+    } catch(e) {
+        console.error("Failed to update TMS KYC status:", e);
+    }
+
+    // Render final card
+    document.getElementById("final-icon").textContent = outcomeIcon;
+    document.getElementById("final-title").textContent = outcomeTitle;
+    document.getElementById("final-title").style.color = outcomeColor;
+    document.getElementById("final-sub").textContent = outcomeSub;
+
+    // Summary
+    const summaryData = [
+        { key: "Risk Score", val: riskResult ? `${riskResult.risk_score?.toFixed(1)}/100` : "N/A" },
+        { key: "Risk Level", val: riskResult ? (riskResult.risk_level||"—").toUpperCase() : "N/A" },
+        { key: "Face Match", val: biometricResult ? (biometricResult.is_match ? "✓ Verified" : "✗ Failed") : "N/A" },
+        { key: "Compliance", val: complianceResult ? (complianceResult.overall_status||"—").toUpperCase() : "N/A" },
+        { key: "Documents", val: ["aadhaar","pan","dl"].filter(d => docState[d].extracted).length + " / 3" },
+        { key: "License No.", val: licenseNumber || "N/A" },
+    ];
+    document.getElementById("final-summary").innerHTML = summaryData.map(s => `
+        <div class="summary-item">
+            <div class="summary-key">${s.key}</div>
+            <div class="summary-val">${s.val}</div>
+        </div>`).join("");
+
+    // Explanation if not approved
+    if (outcome !== "approved" && riskResult?.explanation) {
+        const box = document.getElementById("final-explain");
+        box.innerHTML = `<div class="alert-warn"><strong>🚨 Flag Reason:</strong> ${riskResult.explanation}</div>`;
+        box.classList.remove("hidden");
+    }
+
+    // Actions
+    const actions = document.getElementById("final-actions");
+    const dashboardUrl = getRole() === "shipper" ? "/pages/shipper.html" : "/pages/driver.html";
+    if (outcome === "approved") {
+        actions.innerHTML = `<a href="${dashboardUrl}" class="btn btn-primary">Go to Dashboard →</a>`;
+    } else if (outcome === "manual_review") {
+        actions.innerHTML = `
+            <div class="alert-warn" style="margin-bottom:12px;">Your account is under review. You can log in and check back later.</div>
+            <a href="${dashboardUrl}" class="btn btn-outline">Go to Dashboard</a>`;
+    } else {
+        actions.innerHTML = `
+            <div class="alert-error" style="margin-bottom:12px;">KYC rejected. Please contact support or try again with valid documents.</div>
+            <button class="btn btn-outline" onclick="window.location.reload()">Try Again</button>`;
+    }
+}
+</script>
+</body>
+</html>
